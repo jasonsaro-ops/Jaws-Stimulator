@@ -27,22 +27,47 @@
 
     .workspace { flex: 1; display: flex; flex-direction: column; min-height: 0; }
     .upper {
-      flex: 1 1 55%; display: grid;
-      grid-template-columns: var(--left-w, 280px) 5px 1fr 5px var(--right-w, 270px);
+      flex: 1 1 55%;
+      display: flex;
+      flex-direction: row;
       min-height: 0;
+      overflow: hidden;
     }
-    .upper > .v-resizer:nth-of-type(1) { grid-column: 2; }
-    .upper > .map-wrap { grid-column: 3; }
-    .upper > .v-resizer:nth-of-type(2) { grid-column: 4; }
-    .upper > .panel.left { grid-column: 1; }
-    .upper > .panel.right { grid-column: 5; }
-    .panel { background: var(--panel); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+    .upper > .panel.left {
+      width: var(--left-w, 280px);
+      min-width: 180px;
+      max-width: 420px;
+      flex-shrink: 0;
+    }
+    .upper > .panel.right {
+      width: var(--right-w, 270px);
+      min-width: 180px;
+      max-width: 400px;
+      flex-shrink: 0;
+    }
+    .upper > .map-wrap {
+      flex: 1 1 auto;
+      min-width: 0;
+      min-height: 0;
+      position: relative;
+    }
+    .upper > .v-resizer {
+      width: 5px;
+      flex-shrink: 0;
+      cursor: col-resize;
+      background: transparent;
+      align-self: stretch;
+    }
+    .upper > .v-resizer:hover,
+    .upper > .v-resizer.dragging { background: var(--teal); }
+    .panel { background: var(--panel); display: flex; flex-direction: column; min-height: 0; overflow: hidden; height: 100%; }
     .panel.left { border-right: 1px solid var(--border); }
     .panel.right { border-left: 1px solid var(--border); }
     .panel-h { padding: 12px 14px 8px; border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--teal-d); display: flex; justify-content: space-between; align-items: center; }
     .badge { font-family: 'JetBrains Mono', monospace; font-size: 11px; background: var(--teal-l); color: var(--teal-d); padding: 2px 8px; border-radius: 999px; }
 
-    .left-body, .right-body { padding: 10px 12px; overflow-y: auto; flex: 1; }
+    .left-body, .right-body { padding: 10px 12px; overflow-y: auto; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    .left-body .event-list { flex: 1; min-height: 80px; overflow-y: auto; }
     .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
     .stat-card { background: var(--teal-s); border: 1px solid var(--border); padding: 8px 10px; border-radius: 8px; }
     .stat-card .lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
@@ -59,7 +84,7 @@
     .chip:hover, .chip.active { border-color: var(--teal); color: var(--teal-d); background: var(--teal-l); }
     .chip-label { font-size: 10px; color: var(--muted); width: 100%; margin-bottom: 2px; }
 
-    .event-list { overflow-y: auto; }
+    .event-list { overflow-y: auto; flex: 1; min-height: 0; }
     .event-item { padding: 8px 10px; border-bottom: 1px solid #eef5f8; cursor: pointer; border-radius: 6px; }
     .event-item:hover { background: var(--teal-s); }
     .ei-top { display: flex; justify-content: space-between; gap: 6px; }
@@ -69,8 +94,8 @@
     .ei-meta { font-size: 11px; color: var(--muted); }
     .fatal-tag { background: #ffe4e6; color: var(--fatal); padding: 0 4px; font-size: 9px; font-weight: 600; border-radius: 3px; margin-left: 4px; }
 
-    .map-wrap { position: relative; background: #b8d4e8; min-height: 0; }
-    #map { width: 100%; height: 100%; }
+    .map-wrap { position: relative; background: #b8d4e8; min-height: 0; flex: 1 1 auto; overflow: hidden; }
+    #map { width: 100%; height: 100%; position: absolute; inset: 0; }
     .map-ctrls { position: absolute; top: 10px; right: 10px; z-index: 5; display: flex; flex-direction: column; gap: 5px; }
     .map-btn { background: rgba(255,255,255,.95); border: 1px solid var(--border); color: var(--teal-d); padding: 7px 12px; font: inherit; font-size: 11px; font-weight: 600; border-radius: 8px; cursor: pointer; box-shadow: var(--shadow); }
     .map-btn:hover { background: var(--teal-l); }
