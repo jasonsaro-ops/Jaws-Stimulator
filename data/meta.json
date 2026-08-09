@@ -1,7 +1,9 @@
 {
-  "updated": "2026-08-09T01:21:54.821723+00:00",
+  "updated": "2026-08-09T01:30:33.729621+00:00",
   "source": "Global Shark Attack File (GSAF) \u2014 https://www.sharkattackfile.net",
-  "count": 2500,
-  "min_year": 1990,
-  "max_records": 2500
+  "note": "Coordinates use location overrides \u2192 US state centroids \u2192 country coastal points.",
+  "count": 6932,
+  "min_year": 1800,
+  "max_year": 2026,
+  "max_records": 8000
 }
