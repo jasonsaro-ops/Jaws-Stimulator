@@ -26,7 +26,7 @@
     @keyframes pulse { 50% { opacity: .4; } }
 
     .workspace { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-    .upper { flex: 1; display: grid; grid-template-columns: 280px 1fr 270px; min-height: 0; }
+    .upper { flex: 0 0 48%; display: grid; grid-template-columns: 280px 1fr 270px; min-height: 0; max-height: 48%; }
     .panel { background: var(--panel); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
     .panel.left { border-right: 1px solid var(--border); }
     .panel.right { border-left: 1px solid var(--border); }
@@ -70,18 +70,20 @@
     .right-body .chart-box { background: #f7fbfc; border: 1px solid var(--border); padding: 10px; border-radius: 8px; margin-bottom: 10px; }
     .right-body .chart-box h4 { font-size: 10px; font-weight: 600; letter-spacing: .7px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
     .right-body canvas { max-height: 110px; }
-    .rank-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #eef5f8; font-size: 11px; }
+    .rank-row { display: flex; justify-content: space-between; padding: 4px 6px; border-bottom: 1px solid #eef5f8; font-size: 11px; cursor: pointer; border-radius: 6px; transition: background .12s; }
+    .rank-row:hover { background: var(--teal-s); }
+    .rank-row.active { background: var(--teal-l); outline: 1px solid var(--teal); }
     .rank-row .count { color: var(--teal-d); font-family: 'JetBrains Mono', monospace; }
     .ref-box { background: linear-gradient(135deg, var(--teal-s), #e0f2fe); border: 1px solid var(--border); padding: 10px; border-radius: 8px; font-size: 11px; color: var(--muted); line-height: 1.45; margin-bottom: 10px; }
     .ref-box strong { color: var(--teal-d); }
 
     /* Bottom data table */
     .bottom-panel {
-      height: 240px; flex-shrink: 0; background: var(--panel);
+      flex: 1; min-height: 280px; background: var(--panel);
       border-top: 1px solid var(--border); display: flex; flex-direction: column;
       box-shadow: 0 -2px 12px rgba(15,23,42,.04);
     }
-    .bottom-panel.collapsed { height: 36px; }
+    .bottom-panel.collapsed { flex: 0 0 36px; min-height: 36px; }
     .bottom-bar {
       height: 36px; display: flex; align-items: center; padding: 0 12px; gap: 10px;
       border-bottom: 1px solid var(--border); flex-shrink: 0; background: #f7fbfc;
@@ -394,24 +396,106 @@ function renderCharts(){
   if(yearChart) yearChart.destroy();
   yearChart=new Chart(document.getElementById('chart-year'),{
     type:'line', data:{ labels:years, datasets:[{ data:years.map(y=>byYear[y]), borderColor:'#0d9488', backgroundColor:'rgba(13,148,136,.12)', fill:true, tension:.3, pointRadius:0, borderWidth:2 }]},
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ x:{ticks:{color:'#64748b',maxTicksLimit:5,font:{size:9}},grid:{color:'#eef5f8'}}, y:{ticks:{color:'#64748b',font:{size:9}},grid:{color:'#eef5f8'}} }}
+    options:{
+      responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ x:{ticks:{color:'#64748b',maxTicksLimit:5,font:{size:9}},grid:{color:'#eef5f8'}}, y:{ticks:{color:'#64748b',font:{size:9}},grid:{color:'#eef5f8'}} },
+      onClick(evt, elements){
+        if(!elements.length) return;
+        const yr=parseInt(years[elements[0].index],10);
+        if(adv.yearFrom===yr && adv.yearTo===yr){
+          adv.yearFrom=adv.yearTo=null;
+          document.getElementById('year-from').value='';
+          document.getElementById('year-to').value='';
+        } else {
+          adv.yearFrom=adv.yearTo=yr;
+          document.getElementById('year-from').value=yr;
+          document.getElementById('year-to').value=yr;
+        }
+        refresh();
+      }
+    }
   });
   const fatalN=filtered.filter(d=>d.fatal).length;
   if(outcomeChart) outcomeChart.destroy();
   outcomeChart=new Chart(document.getElementById('chart-outcome'),{
     type:'doughnut', data:{ labels:['Fatal','Non-fatal'], datasets:[{ data:[fatalN,filtered.length-fatalN], backgroundColor:['#e11d48','#0d9488'], borderWidth:0 }]},
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}}} }
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}}},
+      onClick(evt, elements){
+        if(!elements.length) return;
+        const idx=elements[0].index;
+        const label=idx===0?'fatal':'nonfatal';
+        if(adv.outcome===label){ adv.outcome=''; document.getElementById('f-outcome').value=''; }
+        else { adv.outcome=label; document.getElementById('f-outcome').value=label; }
+        // also sync quick filter chips
+        if(adv.outcome==='fatal'){ activeFilter='fatal'; }
+        else if(adv.outcome==='nonfatal'){ activeFilter='nonfatal'; }
+        else { activeFilter='all'; }
+        document.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('active', b.dataset.filter===activeFilter));
+        refresh();
+      }
+    }
   });
-  const rank=(key,el,n=8)=>{
+  const rank=(key,el,n=8,filterKey)=>{
     const m={}; filtered.forEach(d=>{ const k=d[key]||'?'; m[k]=(m[k]||0)+1; });
-    document.getElementById(el).innerHTML=Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,n)
-      .map(([a,b])=>`<div class="rank-row"><span>${a.slice(0,28)}</span><span class="count">${b}</span></div>`).join('')||'—';
+    const entries=Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,n);
+    const box=document.getElementById(el);
+    box.innerHTML=entries.map(([a,b])=>{
+      const active = (filterKey==='country' && adv.country===a) || (filterKey==='source' && activeSource===a) || (filterKey==='species' && adv.species && a.includes(adv.species));
+      return `<div class="rank-row${active?' active':''}" data-rank-key="${filterKey}" data-rank-val="${a.replace(/"/g,'&quot;')}"><span>${a.slice(0,28)}</span><span class="count">${b}</span></div>`;
+    }).join('')||'—';
+    box.querySelectorAll('.rank-row').forEach(row=>{
+      row.onclick=()=>{
+        const k=row.dataset.rankKey;
+        const v=row.dataset.rankVal;
+        if(k==='country'){
+          if(adv.country===v){ adv.country=''; document.getElementById('f-country').value=''; }
+          else { adv.country=v; document.getElementById('f-country').value=v; }
+        } else if(k==='source'){
+          if(activeSource===v){ activeSource='all'; document.querySelectorAll('[data-source]').forEach(b=>b.classList.toggle('active', b.dataset.source==='all')); }
+          else {
+            activeSource=v;
+            document.querySelectorAll('[data-source]').forEach(b=>b.classList.toggle('active', b.dataset.source===v));
+          }
+        } else if(k==='species'){
+          const full = v.replace(/…$/,'');
+          if(adv.species && v.includes(adv.species)){ adv.species=''; document.getElementById('f-species').value=''; }
+          else {
+            // find best matching full species from select options
+            const sel=document.getElementById('f-species');
+            let match=full;
+            for(const opt of sel.options){ if(opt.value && (opt.value.includes(full)||full.includes(opt.value.slice(0,20)))){ match=opt.value; break; } }
+            adv.species=match; sel.value=match;
+          }
+        }
+        refresh();
+      };
+    });
   };
-  rank('country','top-countries');
-  rank('source','by-source',5);
+  rank('country','top-countries',8,'country');
+  rank('source','by-source',5,'source');
   const bySp={}; filtered.forEach(d=>{ let s=(d.species||'Unknown').trim(); if(s.length>32)s=s.slice(0,30)+'…'; if(!s||s==='nan')s='Unknown'; bySp[s]=(bySp[s]||0)+1; });
-  document.getElementById('top-species').innerHTML=Object.entries(bySp).sort((a,b)=>b[1]-a[1]).slice(0,6)
-    .map(([a,b])=>`<div class="rank-row"><span>${a}</span><span class="count">${b}</span></div>`).join('')||'—';
+  const spBox=document.getElementById('top-species');
+  const spEntries=Object.entries(bySp).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  spBox.innerHTML=spEntries.map(([a,b])=>{
+    const active=adv.species && a.includes(adv.species);
+    return `<div class="rank-row${active?' active':''}" data-rank-key="species" data-rank-val="${a.replace(/"/g,'&quot;')}"><span>${a}</span><span class="count">${b}</span></div>`;
+  }).join('')||'—';
+  spBox.querySelectorAll('.rank-row').forEach(row=>{
+    row.onclick=()=>{
+      const v=row.dataset.rankVal;
+      const full=v.replace(/…$/,'');
+      if(adv.species && v.includes(adv.species)){ adv.species=''; document.getElementById('f-species').value=''; }
+      else {
+        const sel=document.getElementById('f-species');
+        let match=full;
+        for(const opt of sel.options){ if(opt.value && (opt.value.includes(full)||full.includes(opt.value.slice(0,20)))){ match=opt.value; break; } }
+        adv.species=match; sel.value=match;
+      }
+      refresh();
+    };
+  });
 }
 
 function openDetail(d){
