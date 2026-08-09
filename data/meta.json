@@ -1,17 +1,19 @@
 {
-  "updated": "2026-08-09T12:16:00.104727+00:00",
+  "updated": "2026-08-09T12:30:00+00:00",
   "sources": {
     "GSAF": 6932,
-    "CDFW California": 205
+    "CDFW California": 205,
+    "Wikipedia (US Fatal)": 183
   },
-  "count": 7137,
-  "min_year": 1800,
+  "count": 7320,
+  "min_year": 1640,
   "max_year": 2026,
-  "note": "GSAF = Global Shark Attack File. CDFW = California Dept of Fish & Wildlife (real coordinates).",
+  "note": "GSAF primary global registry; CDFW California real coords; Wikipedia US fatal historical list. ISAF individual records are not publicly downloadable.",
   "reference": {
     "shark_data_lab_total": 7207,
     "shark_data_lab_fatal": 1523,
     "shark_data_lab_fatality_rate": "21.1%",
-    "shark_data_lab_countries": 121
+    "shark_data_lab_countries": 121,
+    "isaf_note": "Florida Museum ISAF curates individual case files for qualified researchers only; not available as public bulk download."
   }
 }
