@@ -26,7 +26,16 @@
     @keyframes pulse { 50% { opacity: .4; } }
 
     .workspace { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-    .upper { flex: 0 0 48%; display: grid; grid-template-columns: 280px 1fr 270px; min-height: 0; max-height: 48%; }
+    .upper {
+      flex: 1 1 55%; display: grid;
+      grid-template-columns: var(--left-w, 280px) 5px 1fr 5px var(--right-w, 270px);
+      min-height: 0;
+    }
+    .upper > .v-resizer:nth-of-type(1) { grid-column: 2; }
+    .upper > .map-wrap { grid-column: 3; }
+    .upper > .v-resizer:nth-of-type(2) { grid-column: 4; }
+    .upper > .panel.left { grid-column: 1; }
+    .upper > .panel.right { grid-column: 5; }
     .panel { background: var(--panel); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
     .panel.left { border-right: 1px solid var(--border); }
     .panel.right { border-left: 1px solid var(--border); }
@@ -79,11 +88,52 @@
 
     /* Bottom data table */
     .bottom-panel {
-      flex: 1; min-height: 280px; background: var(--panel);
-      border-top: 1px solid var(--border); display: flex; flex-direction: column;
+      flex: 1 1 45%; min-height: 180px; background: var(--panel);
+      display: flex; flex-direction: column;
       box-shadow: 0 -2px 12px rgba(15,23,42,.04);
+      position: relative;
     }
-    .bottom-panel.collapsed { flex: 0 0 36px; min-height: 36px; }
+    .bottom-panel.collapsed { flex: 0 0 36px !important; min-height: 36px; max-height: 36px; }
+    /* Horizontal resize handle between map and table */
+    .h-resizer {
+      height: 6px; cursor: row-resize; background: var(--border);
+      flex-shrink: 0; position: relative; z-index: 15;
+      transition: background .2s ease;
+    }
+    .h-resizer:hover, .h-resizer.dragging { background: var(--teal); }
+    .h-resizer::after {
+      content: ''; position: absolute; left: 50%; top: 1px; transform: translateX(-50%);
+      width: 36px; height: 3px; border-radius: 2px; background: rgba(15,23,42,.2);
+    }
+    /* Vertical resizers for side panels */
+    .v-resizer {
+      width: 5px; cursor: col-resize; background: transparent;
+      flex-shrink: 0; z-index: 15; transition: background .2s ease;
+    }
+    .v-resizer:hover, .v-resizer.dragging { background: var(--teal); }
+    .upper { position: relative; }
+    .panel.left, .panel.right { transition: none; }
+    .event-item, .rank-row, table.data-table tr, .chip, .map-btn {
+      transition: background .2s ease, border-color .2s ease, color .2s ease, box-shadow .2s ease, outline .2s ease;
+    }
+    .event-item.active, table.data-table tr.active-row {
+      background: var(--teal-l); outline: 1px solid var(--teal);
+    }
+    .btn-export {
+      background: var(--teal-d); color: #fff; border: none; padding: 5px 12px;
+      font: inherit; font-size: 11px; font-weight: 600; border-radius: 6px;
+      cursor: pointer; transition: background .2s ease, transform .15s ease;
+    }
+    .btn-export:hover { background: var(--teal); }
+    .btn-export.secondary { background: #fff; color: var(--teal-d); border: 1px solid var(--border); }
+    .btn-export.secondary:hover { background: var(--teal-l); border-color: var(--teal); }
+    .btn-reset-filters {
+      background: #fff; border: 1px solid var(--border); color: var(--muted);
+      padding: 4px 10px; font: inherit; font-size: 11px; font-weight: 500;
+      border-radius: 999px; cursor: pointer; transition: all .2s ease;
+    }
+    .btn-reset-filters:hover { border-color: var(--fatal); color: var(--fatal); background: #fff1f2; }
+
     .bottom-bar {
       height: 36px; display: flex; align-items: center; padding: 0 12px; gap: 10px;
       border-bottom: 1px solid var(--border); flex-shrink: 0; background: #f7fbfc;
@@ -133,8 +183,8 @@
   </div>
 
   <div class="workspace">
-    <div class="upper">
-      <div class="panel left">
+    <div class="upper" id="upper-panels">
+      <div class="panel left" id="panel-left">
         <div class="panel-h">Encounter log <span class="badge" id="visible-count">0</span></div>
         <div class="left-body">
           <div class="stat-grid">
@@ -151,7 +201,7 @@
             <button class="chip" data-source="CDFW California">CA CDFW</button>
             <button class="chip" data-source="Wikipedia (US Fatal)">Wiki Fatal</button>
           </div>
-          <div class="chip-label">Quick filters</div>
+          <div class="chip-label">Quick filters <button class="btn-reset-filters" id="btn-reset-left" style="margin-left:6px;padding:2px 8px;font-size:10px">Reset</button></div>
           <div class="chip-row" id="filter-chips">
             <button class="chip active" data-filter="all">All</button>
             <button class="chip" data-filter="fatal">Fatal</button>
@@ -164,7 +214,8 @@
         </div>
       </div>
 
-      <div class="map-wrap">
+      <div class="v-resizer" id="resize-left" title="Drag to resize"></div>
+      <div class="map-wrap" id="map-wrap">
         <div class="map-title">Globe view · zoom in for flat map</div>
         <div id="map"></div>
         <div class="map-ctrls">
@@ -174,7 +225,8 @@
         </div>
       </div>
 
-      <div class="panel right">
+      <div class="v-resizer" id="resize-right" title="Drag to resize"></div>
+      <div class="panel right" id="panel-right">
         <div class="panel-h">Analytics</div>
         <div class="right-body">
           <div class="ref-box" id="ref-stats">
@@ -191,11 +243,15 @@
       </div>
     </div>
 
+    <div class="h-resizer" id="resize-bottom" title="Drag to resize map / records"></div>
     <div class="bottom-panel" id="bottom-panel">
       <div class="bottom-bar">
         <h3>Attack records</h3>
         <span class="badge" id="table-count">0</span>
         <div class="spacer"></div>
+        <button class="btn-export secondary" id="btn-export-csv">Export CSV</button>
+        <button class="btn-export" id="btn-export-xlsx">Export Excel</button>
+        <button class="btn-reset-filters" id="btn-reset-all">Reset filters</button>
         <button class="map-btn" id="btn-toggle-table" style="padding:4px 10px">Collapse</button>
       </div>
       <div class="adv-filters" id="adv-filters">
@@ -220,7 +276,8 @@
           <option value="fatal">Fatal</option>
           <option value="nonfatal">Non-fatal</option>
         </select>
-        <button class="chip" id="btn-clear-adv">Clear</button>
+        <button class="chip" id="btn-clear-adv">Clear table filters</button>
+        <button class="btn-reset-filters" id="btn-reset-adv">Reset all</button>
       </div>
       <div class="table-wrap">
         <table class="data-table">
@@ -346,6 +403,171 @@ function renderTable(){
   });
 }
 
+
+const COUNTRY_VIEW = {
+  "USA": { center: [-95, 38], zoom: 3.2 },
+  "UNITED STATES": { center: [-95, 38], zoom: 3.2 },
+  "AUSTRALIA": { center: [134, -25], zoom: 3.5 },
+  "SOUTH AFRICA": { center: [25, -29], zoom: 5 },
+  "BRAZIL": { center: [-50, -14], zoom: 3.5 },
+  "MEXICO": { center: [-102, 23], zoom: 4 },
+  "NEW ZEALAND": { center: [174, -41], zoom: 5 },
+  "BAHAMAS": { center: [-76, 24], zoom: 6 },
+  "PAPUA NEW GUINEA": { center: [147, -6], zoom: 5.5 },
+  "FIJI": { center: [178, -18], zoom: 6 },
+  "EGYPT": { center: [32, 27], zoom: 5.5 },
+  "REUNION": { center: [55.5, -21.1], zoom: 8 },
+  "ITALY": { center: [12.5, 42], zoom: 5 },
+  "JAPAN": { center: [138, 36], zoom: 4.5 },
+  "INDIA": { center: [78, 22], zoom: 4 },
+  "PHILIPPINES": { center: [122, 12], zoom: 5 },
+  "FRANCE": { center: [2, 46], zoom: 5 },
+  "SPAIN": { center: [-3.5, 40], zoom: 5 },
+  "UNITED KINGDOM": { center: [-2, 54], zoom: 5 },
+  "CANADA": { center: [-95, 55], zoom: 3 },
+  "CUBA": { center: [-79, 22], zoom: 6 },
+  "COSTA RICA": { center: [-84, 10], zoom: 6.5 },
+  "NEW CALEDONIA": { center: [165.5, -21], zoom: 6 },
+  "MOZAMBIQUE": { center: [35, -18], zoom: 5 },
+  "INDONESIA": { center: [118, -2], zoom: 4 },
+};
+
+function zoomToCountry(name) {
+  if (!map || !name) return;
+  const key = Object.keys(COUNTRY_VIEW).find(k => k.toLowerCase() === name.toLowerCase() || name.toUpperCase().includes(k));
+  const view = key ? COUNTRY_VIEW[key] : null;
+  if (view) {
+    try { map.setProjection({ type: 'mercator' }); } catch(_){}
+    map.flyTo({ center: view.center, zoom: view.zoom, essential: true, duration: 1200 });
+  } else {
+    // fallback: compute bounds from filtered points of that country
+    const pts = filtered.filter(d => d.country === name && d.lat && d.lon);
+    if (pts.length) {
+      const lats = pts.map(d => d.lat), lons = pts.map(d => d.lon);
+      const sw = [Math.min(...lons), Math.min(...lats)];
+      const ne = [Math.max(...lons), Math.max(...lats)];
+      try { map.setProjection({ type: 'mercator' }); } catch(_){}
+      map.fitBounds([sw, ne], { padding: 60, maxZoom: 7, duration: 1200 });
+    }
+  }
+}
+
+function resetAllFilters() {
+  activeFilter = 'all';
+  activeSource = 'all';
+  searchQuery = '';
+  adv.yearFrom = adv.yearTo = null;
+  adv.continent = adv.country = adv.species = adv.type = adv.outcome = '';
+  const searchEl = document.getElementById('search');
+  if (searchEl) searchEl.value = '';
+  document.querySelectorAll('[data-filter]').forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
+  document.querySelectorAll('[data-source]').forEach(b => b.classList.toggle('active', b.dataset.source === 'all'));
+  ['year-from','year-to','f-continent','f-country','f-species','f-type','f-outcome'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  refresh();
+  try { map.setProjection({ type: 'globe' }); } catch(_){}
+  map.flyTo({ center: [10, 10], zoom: 1.2, essential: true });
+}
+
+function exportCSV() {
+  const cols = ['year','date','country','state','location','type','fatal','species','activity','name','sex','age','injury','time','source','continent','lat','lon'];
+  const esc = v => {
+    const s = v == null ? '' : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [cols.join(',')];
+  filtered.forEach(d => {
+    lines.push(cols.map(c => esc(c === 'fatal' ? (d.fatal ? 'Y' : 'N') : d[c])).join(','));
+  });
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'jaws-stimulator-attacks-' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function exportExcel() {
+  // SpreadsheetML XML (opens in Excel without external libs)
+  const cols = ['year','date','country','state','location','type','fatal','species','activity','name','sex','age','injury','time','source','continent','lat','lon'];
+  const headers = cols.map(c => c.charAt(0).toUpperCase() + c.slice(1));
+  let rows = '<Row>' + headers.map(h => '<Cell><Data ss:Type="String">' + h.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</Data></Cell>').join('') + '</Row>';
+  filtered.forEach(d => {
+    rows += '<Row>';
+    cols.forEach(c => {
+      let v = c === 'fatal' ? (d.fatal ? 'Y' : 'N') : (d[c] == null ? '' : d[c]);
+      const num = typeof v === 'number' || (c === 'year' || c === 'lat' || c === 'lon');
+      const t = num && v !== '' && !isNaN(v) ? 'Number' : 'String';
+      const s = String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      rows += '<Cell><Data ss:Type="' + t + '">' + s + '</Data></Cell>';
+    });
+    rows += '</Row>';
+  });
+  const xml = '<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>' +
+    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
+    '<Worksheet ss:Name="Attacks"><Table>' + rows + '</Table></Worksheet></Workbook>';
+  const blob = new Blob([xml], { type: 'application/vnd.ms-excel' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'jaws-stimulator-attacks-' + new Date().toISOString().slice(0,10) + '.xls';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function setupResizers() {
+  // Horizontal (map vs table)
+  const hRes = document.getElementById('resize-bottom');
+  const upper = document.getElementById('upper-panels');
+  const bottom = document.getElementById('bottom-panel');
+  let dragging = null;
+
+  hRes.addEventListener('mousedown', e => {
+    e.preventDefault();
+    dragging = 'h';
+    hRes.classList.add('dragging');
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+  });
+
+  // Vertical side panels
+  const leftRes = document.getElementById('resize-left');
+  const rightRes = document.getElementById('resize-right');
+  leftRes.addEventListener('mousedown', e => { e.preventDefault(); dragging = 'left'; leftRes.classList.add('dragging'); document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'; });
+  rightRes.addEventListener('mousedown', e => { e.preventDefault(); dragging = 'right'; rightRes.classList.add('dragging'); document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'; });
+
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const workspace = document.querySelector('.workspace');
+    const rect = workspace.getBoundingClientRect();
+    if (dragging === 'h') {
+      const topH = e.clientY - rect.top;
+      const total = rect.height - 6;
+      const topPct = Math.min(80, Math.max(25, (topH / total) * 100));
+      upper.style.flex = '0 0 ' + topPct + '%';
+      bottom.style.flex = '1 1 ' + (100 - topPct) + '%';
+      bottom.classList.remove('collapsed');
+      map && map.resize();
+    } else if (dragging === 'left') {
+      const w = Math.min(420, Math.max(180, e.clientX - rect.left));
+      document.documentElement.style.setProperty('--left-w', w + 'px');
+      map && map.resize();
+    } else if (dragging === 'right') {
+      const w = Math.min(400, Math.max(180, rect.right - e.clientX));
+      document.documentElement.style.setProperty('--right-w', w + 'px');
+      map && map.resize();
+    }
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    document.querySelectorAll('.h-resizer, .v-resizer').forEach(el => el.classList.remove('dragging'));
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    dragging = null;
+    map && map.resize();
+  });
+}
+
 function initMap(){
   map=new maplibregl.Map({
     container:'map',
@@ -450,8 +672,8 @@ function renderCharts(){
         const k=row.dataset.rankKey;
         const v=row.dataset.rankVal;
         if(k==='country'){
-          if(adv.country===v){ adv.country=''; document.getElementById('f-country').value=''; }
-          else { adv.country=v; document.getElementById('f-country').value=v; }
+          if(adv.country===v){ adv.country=''; document.getElementById('f-country').value=''; refresh(); try{map.setProjection({type:'globe'});}catch(_){ } map.flyTo({center:[10,10],zoom:1.2,essential:true}); return; }
+          else { adv.country=v; document.getElementById('f-country').value=v; refresh(); zoomToCountry(v); return; }
         } else if(k==='source'){
           if(activeSource===v){ activeSource='all'; document.querySelectorAll('[data-source]').forEach(b=>b.classList.toggle('active', b.dataset.source==='all')); }
           else {
@@ -561,13 +783,40 @@ document.getElementById('backdrop').onclick=closeDetail;
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeDetail(); });
 document.getElementById('btn-toggle-table').onclick=()=>{
   const p=document.getElementById('bottom-panel');
+  const upper=document.getElementById('upper-panels');
   p.classList.toggle('collapsed');
-  document.getElementById('btn-toggle-table').textContent=p.classList.contains('collapsed')?'Expand':'Collapse';
+  if(p.classList.contains('collapsed')){
+    upper.style.flex='1 1 auto';
+    document.getElementById('btn-toggle-table').textContent='Expand';
+  } else {
+    upper.style.flex='1 1 55%';
+    p.style.flex='1 1 45%';
+    document.getElementById('btn-toggle-table').textContent='Collapse';
+  }
   setTimeout(()=>map.resize(),200);
 };
 
+document.getElementById('btn-export-csv').onclick = exportCSV;
+document.getElementById('btn-export-xlsx').onclick = exportExcel;
+document.getElementById('btn-reset-all').onclick = resetAllFilters;
+document.getElementById('btn-reset-adv').onclick = resetAllFilters;
+document.getElementById('btn-reset-left').onclick = resetAllFilters;
+// enhance clear adv to only clear table filters (already exists)
+const _clearAdv = document.getElementById('btn-clear-adv');
+if (_clearAdv) _clearAdv.onclick = () => {
+  adv.yearFrom = adv.yearTo = null;
+  adv.continent = adv.country = adv.species = adv.type = adv.outcome = '';
+  ['year-from','year-to','f-continent','f-country','f-species','f-type','f-outcome'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  refresh();
+};
+
 initMap();
+setupResizers();
 loadData();
+// default: globe fills upper area; balanced split already in CSS
+setTimeout(() => { map && map.resize(); }, 300);
 </script>
 </body>
 </html>
