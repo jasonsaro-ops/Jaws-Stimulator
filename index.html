@@ -464,7 +464,7 @@
         </div>
 
         <div class="search-box">
-          <input type="text" id="search" placeholder="Search location, species, activity…" autocomplete="off" />
+          <input type="text" id="search" placeholder="Search country, state, location, species, activity, name, injury…" autocomplete="off" />
         </div>
 
         <div class="filters">
@@ -472,7 +472,10 @@
           <button class="filter-btn" data-filter="fatal">Fatal</button>
           <button class="filter-btn" data-filter="nonfatal">Non-fatal</button>
           <button class="filter-btn" data-filter="unprovoked">Unprovoked</button>
-          <button class="filter-btn" data-filter="recent">2024+</button>
+          <button class="filter-btn" data-filter="provoked">Provoked</button>
+          <button class="filter-btn" data-filter="watercraft">Watercraft</button>
+          <button class="filter-btn" data-filter="recent">2020+</button>
+          <button class="filter-btn" data-filter="historic">Pre-1950</button>
         </div>
 
         <div class="event-list" id="event-list"></div>
@@ -481,7 +484,7 @@
 
     <!-- CENTER MAP -->
     <div class="map-wrap">
-      <div class="map-title">GLOBAL INCIDENT MAP • 2000–2026</div>
+      <div class="map-title">GLOBAL INCIDENT MAP • 1800–2026</div>
       <div id="map"></div>
       <div class="map-overlay-controls">
         <button class="map-btn" id="btn-reset">RESET VIEW</button>
@@ -570,15 +573,23 @@
     // ========== FILTERS & SEARCH ==========
     function applyFilters() {
       filtered = allData.filter(d => {
+        const t = (d.type || '').toLowerCase();
         if (activeFilter === 'fatal' && !d.fatal) return false;
         if (activeFilter === 'nonfatal' && d.fatal) return false;
-        if (activeFilter === 'unprovoked' && !(d.type || '').toLowerCase().includes('unprovoked')) return false;
-        if (activeFilter === 'recent' && (d.year || 0) < 2024) return false;
+        if (activeFilter === 'unprovoked' && !t.includes('unprovoked')) return false;
+        if (activeFilter === 'provoked' && !t.includes('provoked')) return false;
+        if (activeFilter === 'watercraft' && !(t.includes('watercraft') || t.includes('boat') || t.includes('sea disaster'))) return false;
+        if (activeFilter === 'recent' && (d.year || 0) < 2020) return false;
+        if (activeFilter === 'historic' && (d.year || 9999) >= 1950) return false;
 
         if (searchQuery) {
           const q = searchQuery.toLowerCase();
-          const hay = [d.country, d.state, d.location, d.activity, d.species, d.name, d.injury, d.type]
-            .join(' ').toLowerCase();
+          // Search all primary GSAF / Shark Data Lab fields
+          const hay = [
+            d.date, d.year, d.type, d.country, d.state, d.location,
+            d.activity, d.name, d.sex, d.age, d.injury, d.time,
+            d.species, d.source, d.fatal ? 'fatal' : 'non-fatal'
+          ].join(' ').toLowerCase();
           if (!hay.includes(q)) return false;
         }
         return true;
@@ -603,7 +614,7 @@
     function renderList() {
       const list = document.getElementById('event-list');
       list.innerHTML = '';
-      const show = filtered.slice(0, 250); // performance
+      const show = filtered.slice(0, 400); // performance
       show.forEach(d => {
         const el = document.createElement('div');
         el.className = 'event-item';
