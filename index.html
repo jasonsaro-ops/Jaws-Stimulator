@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JAWS STIMULATOR — Global Shark Encounter Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0a0e14;
+      --panel: #0d1219;
+      --panel-border: #1a2535;
+      --cyan: #00e5ff;
+      --cyan-dim: #00a8b8;
+      --magenta: #ff2d95;
+      --text: #c8d6e5;
+      --text-dim: #6b7c8f;
+      --fatal: #ff3366;
+      --safe: #00e5ff;
+      --grid: rgba(0, 229, 255, 0.06);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top bar */
+    .topbar {
+      height: 42px;
+      background: linear-gradient(180deg, #0f1620 0%, #0a0e14 100%);
+      border-bottom: 1px solid var(--panel-border);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 20px;
+      flex-shrink: 0;
+    }
+    .topbar .brand {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      letter-spacing: 3px;
+      color: var(--cyan);
+      text-transform: uppercase;
+    }
+    .topbar .brand span { color: var(--text-dim); font-weight: 400; }
+    .topbar .status {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .pulse {
+      width: 8px; height: 8px;
+      background: var(--cyan);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--cyan);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+
+    /* Main layout */
+    .main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 280px 1fr 300px;
+      gap: 0;
+      min-height: 0;
+    }
+
+    /* Panels */
+    .panel {
+      background: var(--panel);
+      border-right: 1px solid var(--panel-border);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .panel:last-child { border-right: none; border-left: 1px solid var(--panel-border); }
+
+    .panel-header {
+      padding: 12px 14px 8px;
+      border-bottom: 1px solid var(--panel-border);
+      font-family: 'Orbitron', sans-serif;
+      font-size: 11px;
+      letter-spacing: 2px;
+      color: var(--cyan);
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .panel-header .badge {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      background: rgba(0, 229, 255, 0.12);
+      color: var(--cyan);
+      padding: 2px 6px;
+      border-radius: 2px;
+    }
+
+    /* Left panel */
+    .left-content {
+      padding: 12px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .stat-card {
+      background: rgba(0, 229, 255, 0.04);
+      border: 1px solid var(--panel-border);
+      padding: 10px;
+      border-radius: 2px;
+    }
+    .stat-card .label {
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .stat-card .value {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 18px;
+      color: var(--cyan);
+      font-weight: 600;
+    }
+    .stat-card .value.fatal { color: var(--fatal); }
+
+    .search-box {
+      position: relative;
+      margin-bottom: 12px;
+    }
+    .search-box input {
+      width: 100%;
+      background: #080c12;
+      border: 1px solid var(--panel-border);
+      color: var(--text);
+      padding: 8px 12px 8px 32px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      outline: none;
+      border-radius: 2px;
+    }
+    .search-box input:focus { border-color: var(--cyan-dim); }
+    .search-box::before {
+      content: '⌕';
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-dim);
+      font-size: 14px;
+    }
+
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    .filter-btn {
+      background: transparent;
+      border: 1px solid var(--panel-border);
+      color: var(--text-dim);
+      padding: 4px 8px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      cursor: pointer;
+      border-radius: 2px;
+      transition: all 0.15s;
+    }
+    .filter-btn:hover, .filter-btn.active {
+      border-color: var(--cyan);
+      color: var(--cyan);
+      background: rgba(0, 229, 255, 0.08);
+    }
+
+    .event-list {
+      flex: 1;
+      overflow-y: auto;
+    }
+    .event-item {
+      padding: 8px 10px;
+      border-bottom: 1px solid rgba(26, 37, 53, 0.6);
+      cursor: pointer;
+      transition: background 0.12s;
+      font-size: 11px;
+    }
+    .event-item:hover { background: rgba(0, 229, 255, 0.06); }
+    .event-item.active { background: rgba(0, 229, 255, 0.12); border-left: 2px solid var(--cyan); }
+    .event-item .ei-date { color: var(--cyan-dim); font-size: 10px; }
+    .event-item .ei-loc { color: var(--text); margin: 2px 0; }
+    .event-item .ei-meta { color: var(--text-dim); font-size: 10px; }
+    .event-item .fatal-tag {
+      display: inline-block;
+      background: rgba(255, 51, 102, 0.2);
+      color: var(--fatal);
+      padding: 0 4px;
+      font-size: 9px;
+      margin-left: 4px;
+    }
+
+    /* Center map */
+    .map-wrap {
+      position: relative;
+      background: #05080c;
+      min-height: 0;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+      background: #05080c;
+    }
+    .leaflet-container { background: #05080c; font-family: 'Share Tech Mono', monospace; }
+    .leaflet-control-zoom a {
+      background: #0d1219 !important;
+      color: var(--cyan) !important;
+      border-color: var(--panel-border) !important;
+    }
+    .leaflet-control-attribution { display: none !important; }
+
+    .map-overlay-controls {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .map-btn {
+      background: rgba(13, 18, 25, 0.92);
+      border: 1px solid var(--panel-border);
+      color: var(--cyan);
+      padding: 7px 12px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      cursor: pointer;
+      border-radius: 2px;
+      backdrop-filter: blur(4px);
+      transition: all 0.15s;
+    }
+    .map-btn:hover {
+      border-color: var(--cyan);
+      background: rgba(0, 229, 255, 0.12);
+    }
+
+    .map-title {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 1000;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 11px;
+      letter-spacing: 2px;
+      color: var(--cyan);
+      background: rgba(13, 18, 25, 0.85);
+      padding: 6px 10px;
+      border: 1px solid var(--panel-border);
+      border-radius: 2px;
+      pointer-events: none;
+    }
+
+    /* Custom markers */
+    .shark-marker {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      border: 1.5px solid;
+      box-shadow: 0 0 8px;
+    }
+    .shark-marker.fatal {
+      background: var(--fatal);
+      border-color: #ff6b8a;
+      box-shadow: 0 0 10px var(--fatal);
+    }
+    .shark-marker.nonfatal {
+      background: var(--cyan);
+      border-color: #66f0ff;
+      box-shadow: 0 0 8px var(--cyan);
+    }
+
+    /* Right panel charts */
+    .right-content {
+      padding: 12px;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .chart-box {
+      background: rgba(0, 229, 255, 0.03);
+      border: 1px solid var(--panel-border);
+      padding: 10px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    .chart-box h4 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      color: var(--cyan-dim);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+    .chart-box canvas { max-height: 140px; }
+
+    .species-list, .country-list {
+      font-size: 11px;
+    }
+    .rank-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(26, 37, 53, 0.5);
+    }
+    .rank-row .name { color: var(--text); }
+    .rank-row .count { color: var(--cyan); }
+
+    /* Floating detail window */
+    .detail-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(420px, 90vw);
+      max-height: 80vh;
+      background: #0c121a;
+      border: 1px solid var(--cyan-dim);
+      box-shadow: 0 0 40px rgba(0, 229, 255, 0.25), 0 20px 60px rgba(0,0,0,0.6);
+      z-index: 2000;
+      display: none;
+      flex-direction: column;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .detail-modal.open { display: flex; }
+    .detail-header {
+      padding: 12px 14px;
+      background: rgba(0, 229, 255, 0.08);
+      border-bottom: 1px solid var(--panel-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .detail-header h3 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 13px;
+      color: var(--cyan);
+      letter-spacing: 1px;
+    }
+    .detail-close {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-size: 20px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0 4px;
+    }
+    .detail-close:hover { color: var(--cyan); }
+    .detail-body {
+      padding: 14px;
+      overflow-y: auto;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .detail-row {
+      display: grid;
+      grid-template-columns: 90px 1fr;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .detail-row .lbl { color: var(--text-dim); }
+    .detail-row .val { color: var(--text); }
+    .detail-row .val.fatal { color: var(--fatal); font-weight: 600; }
+
+    .backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 1999;
+      display: none;
+    }
+    .backdrop.open { display: block; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #1a2535; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--cyan-dim); }
+
+    /* Responsive */
+    @media (max-width: 1100px) {
+      .main { grid-template-columns: 240px 1fr 260px; }
+    }
+    @media (max-width: 900px) {
+      .main { grid-template-columns: 1fr; grid-template-rows: 200px 1fr 220px; }
+      .panel { border-right: none; border-bottom: 1px solid var(--panel-border); }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">JAWS <span>STIMULATOR</span></div>
+    <div class="status">
+      <div class="pulse"></div>
+      <span id="status-text">SYSTEM ONLINE • DATA STREAM ACTIVE</span>
+      <span style="margin-left:12px;color:var(--text-dim)">|</span>
+      <span id="last-update" style="margin-left:12px">LAST SYNC: —</span>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- LEFT -->
+    <div class="panel">
+      <div class="panel-header">
+        Encounter Log
+        <span class="badge" id="visible-count">0</span>
+      </div>
+      <div class="left-content">
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="label">Incidents</div>
+            <div class="value" id="stat-total">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Fatal</div>
+            <div class="value fatal" id="stat-fatal">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Countries</div>
+            <div class="value" id="stat-countries">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Years</div>
+            <div class="value" id="stat-years">—</div>
+          </div>
+        </div>
+
+        <div class="search-box">
+          <input type="text" id="search" placeholder="Search location, species, activity…" autocomplete="off" />
+        </div>
+
+        <div class="filters">
+          <button class="filter-btn active" data-filter="all">All</button>
+          <button class="filter-btn" data-filter="fatal">Fatal</button>
+          <button class="filter-btn" data-filter="nonfatal">Non-fatal</button>
+          <button class="filter-btn" data-filter="unprovoked">Unprovoked</button>
+          <button class="filter-btn" data-filter="recent">2024+</button>
+        </div>
+
+        <div class="event-list" id="event-list"></div>
+      </div>
+    </div>
+
+    <!-- CENTER MAP -->
+    <div class="map-wrap">
+      <div class="map-title">GLOBAL INCIDENT MAP • 2000–2026</div>
+      <div id="map"></div>
+      <div class="map-overlay-controls">
+        <button class="map-btn" id="btn-reset">RESET VIEW</button>
+        <button class="map-btn" id="btn-zoom-in">ZOOM +</button>
+        <button class="map-btn" id="btn-zoom-out">ZOOM −</button>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="panel">
+      <div class="panel-header">Analytics</div>
+      <div class="right-content">
+        <div class="chart-box">
+          <h4>Incidents by Year</h4>
+          <canvas id="chart-year"></canvas>
+        </div>
+        <div class="chart-box">
+          <h4>Top Countries</h4>
+          <div class="country-list" id="top-countries"></div>
+        </div>
+        <div class="chart-box">
+          <h4>Outcome Distribution</h4>
+          <canvas id="chart-outcome"></canvas>
+        </div>
+        <div class="chart-box">
+          <h4>Most Reported Species</h4>
+          <div class="species-list" id="top-species"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div class="backdrop" id="backdrop"></div>
+  <div class="detail-modal" id="detail-modal">
+    <div class="detail-header">
+      <h3>INCIDENT DETAIL</h3>
+      <button class="detail-close" id="detail-close">×</button>
+    </div>
+    <div class="detail-body" id="detail-body"></div>
+  </div>
+
+  <script>
+    // ========== DATA ==========
+    let allData = [];
+    let filtered = [];
+    let markers = [];
+    let map, yearChart, outcomeChart;
+    let activeFilter = 'all';
+    let searchQuery = '';
+
+    // Approximate country centroids used for demo geolocation
+    // (Shark Data Lab geocodes the full GSAF; this sample uses coastal approximations)
+
+    async function loadData() {
+      try {
+        const res = await fetch('data/shark_data.json');
+        allData = await res.json();
+      } catch (e) {
+        console.warn('Could not load local JSON, using embedded fallback sample');
+        allData = FALLBACK_SAMPLE;
+      }
+      // Prefer meta.json timestamp if present
+      try {
+        const metaRes = await fetch('data/meta.json');
+        if (metaRes.ok) {
+          const meta = await metaRes.json();
+          const when = (meta.updated || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+          document.getElementById('last-update').textContent =
+            'LAST SYNC: ' + when + ' • ' + (meta.count || allData.length) + ' records (GSAF)';
+        } else {
+          document.getElementById('last-update').textContent =
+            'LAST SYNC: ' + new Date().toISOString().slice(0, 10) + ' (GSAF)';
+        }
+      } catch (_) {
+        document.getElementById('last-update').textContent =
+          'LAST SYNC: ' + new Date().toISOString().slice(0, 10) + ' (GSAF)';
+      }
+      applyFilters();
+      updateStats();
+      renderList();
+      renderMap();
+      renderCharts();
+    }
+
+    // ========== FILTERS & SEARCH ==========
+    function applyFilters() {
+      filtered = allData.filter(d => {
+        if (activeFilter === 'fatal' && !d.fatal) return false;
+        if (activeFilter === 'nonfatal' && d.fatal) return false;
+        if (activeFilter === 'unprovoked' && !(d.type || '').toLowerCase().includes('unprovoked')) return false;
+        if (activeFilter === 'recent' && (d.year || 0) < 2024) return false;
+
+        if (searchQuery) {
+          const q = searchQuery.toLowerCase();
+          const hay = [d.country, d.state, d.location, d.activity, d.species, d.name, d.injury, d.type]
+            .join(' ').toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+      document.getElementById('visible-count').textContent = filtered.length;
+    }
+
+    function updateStats() {
+      const total = filtered.length;
+      const fatal = filtered.filter(d => d.fatal).length;
+      const countries = new Set(filtered.map(d => d.country)).size;
+      const years = filtered.map(d => d.year).filter(Boolean);
+      const yrRange = years.length ? `${Math.min(...years)}–${Math.max(...years)}` : '—';
+
+      document.getElementById('stat-total').textContent = total.toLocaleString();
+      document.getElementById('stat-fatal').textContent = fatal.toLocaleString();
+      document.getElementById('stat-countries').textContent = countries;
+      document.getElementById('stat-years').textContent = yrRange;
+    }
+
+    // ========== LIST ==========
+    function renderList() {
+      const list = document.getElementById('event-list');
+      list.innerHTML = '';
+      const show = filtered.slice(0, 250); // performance
+      show.forEach(d => {
+        const el = document.createElement('div');
+        el.className = 'event-item';
+        el.dataset.id = d.id;
+        el.innerHTML = `
+          <div class="ei-date">${d.date || d.year || '—'} ${d.fatal ? '<span class="fatal-tag">FATAL</span>' : ''}</div>
+          <div class="ei-loc">${d.location || d.state || d.country || 'Unknown location'}</div>
+          <div class="ei-meta">${d.country} · ${(d.species || 'Species unknown').slice(0, 40)}</div>
+        `;
+        el.addEventListener('click', () => openDetail(d));
+        list.appendChild(el);
+      });
+    }
+
+    // ========== MAP ==========
+    function initMap() {
+      map = L.map('map', {
+        center: [10, 20],
+        zoom: 2,
+        zoomControl: false,
+        attributionControl: false,
+        minZoom: 2,
+        maxZoom: 10,
+        worldCopyJump: true
+      });
+
+      // Dark basemap
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        subdomains: 'abcd',
+        maxZoom: 19
+      }).addTo(map);
+
+      // Subtle grid-like feel via CSS already applied
+    }
+
+    function renderMap() {
+      // clear old markers
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
+
+      filtered.forEach(d => {
+        if (d.lat == null || d.lon == null) return;
+        const isFatal = d.fatal;
+        const icon = L.divIcon({
+          className: '',
+          html: `<div class="shark-marker ${isFatal ? 'fatal' : 'nonfatal'}"></div>`,
+          iconSize: [12, 12],
+          iconAnchor: [6, 6]
+        });
+        const m = L.marker([d.lat, d.lon], { icon }).addTo(map);
+        m.on('click', () => openDetail(d));
+        markers.push(m);
+      });
+    }
+
+    // ========== CHARTS ==========
+    function renderCharts() {
+      // Year chart
+      const byYear = {};
+      filtered.forEach(d => {
+        if (d.year) byYear[d.year] = (byYear[d.year] || 0) + 1;
+      });
+      const years = Object.keys(byYear).sort();
+      const counts = years.map(y => byYear[y]);
+
+      if (yearChart) yearChart.destroy();
+      yearChart = new Chart(document.getElementById('chart-year'), {
+        type: 'line',
+        data: {
+          labels: years,
+          datasets: [{
+            data: counts,
+            borderColor: '#00e5ff',
+            backgroundColor: 'rgba(0, 229, 255, 0.08)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 2,
+            pointBackgroundColor: '#00e5ff',
+            borderWidth: 1.5
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: {
+              ticks: { color: '#6b7c8f', font: { size: 9, family: 'Share Tech Mono' }, maxTicksLimit: 8 },
+              grid: { color: 'rgba(0,229,255,0.05)' }
+            },
+            y: {
+              ticks: { color: '#6b7c8f', font: { size: 9, family: 'Share Tech Mono' } },
+              grid: { color: 'rgba(0,229,255,0.05)' }
+            }
+          }
+        }
+      });
+
+      // Outcome doughnut
+      const fatalN = filtered.filter(d => d.fatal).length;
+      const nonN = filtered.length - fatalN;
+      if (outcomeChart) outcomeChart.destroy();
+      outcomeChart = new Chart(document.getElementById('chart-outcome'), {
+        type: 'doughnut',
+        data: {
+          labels: ['Fatal', 'Non-fatal'],
+          datasets: [{
+            data: [fatalN, nonN],
+            backgroundColor: ['#ff3366', '#00e5ff'],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: '#c8d6e5', font: { size: 10, family: 'Share Tech Mono' }, boxWidth: 10 }
+            }
+          }
+        }
+      });
+
+      // Top countries
+      const byCountry = {};
+      filtered.forEach(d => {
+        const c = d.country || 'Unknown';
+        byCountry[c] = (byCountry[c] || 0) + 1;
+      });
+      const topC = Object.entries(byCountry).sort((a,b) => b[1]-a[1]).slice(0, 8);
+      document.getElementById('top-countries').innerHTML = topC.map(([name, n]) =>
+        `<div class="rank-row"><span class="name">${name}</span><span class="count">${n}</span></div>`
+      ).join('') || '<div class="rank-row">No data</div>';
+
+      // Species
+      const bySp = {};
+      filtered.forEach(d => {
+        let s = (d.species || 'Unknown').replace(/\s+/g, ' ').trim();
+        if (s.length > 40) s = s.slice(0, 37) + '…';
+        if (!s || s === 'nan' || s === 'Unknown') s = 'Unidentified / Unknown';
+        bySp[s] = (bySp[s] || 0) + 1;
+      });
+      const topS = Object.entries(bySp).sort((a,b) => b[1]-a[1]).slice(0, 7);
+      document.getElementById('top-species').innerHTML = topS.map(([name, n]) =>
+        `<div class="rank-row"><span class="name">${name}</span><span class="count">${n}</span></div>`
+      ).join('') || '<div class="rank-row">No data</div>';
+    }
+
+    // ========== DETAIL MODAL ==========
+    function openDetail(d) {
+      const body = document.getElementById('detail-body');
+      body.innerHTML = `
+        <div class="detail-row"><span class="lbl">Date</span><span class="val">${d.date || d.year || '—'}</span></div>
+        <div class="detail-row"><span class="lbl">Type</span><span class="val">${d.type || '—'}</span></div>
+        <div class="detail-row"><span class="lbl">Country</span><span class="val">${d.country || '—'}</span></div>
+        <div class="detail-row"><span class="lbl">State / Area</span><span class="val">${d.state || '—'}</span></div>
+        <div class="detail-row"><span class="lbl">Location</span><span class="val">${d.location || '—'}</span></div>
+        <div class="detail-row"><span class="lbl">Activity</span><span class="val">${d.activity || '—'}</span></div>
+        <div class="detail-row"><span class="lbl">Name</span><span class="val">${d.name || '—'}</span></div>
+        <div class="detail-row"><span class="lbl">Sex / Age</span><span class="val">${(d.sex || '—')} / ${d.age || '—'}</span></div>
+        <div class="detail-row"><span class="lbl">Injury</span><span class="val">${d.injury || '—'}</span></div>
+        <div class="detail-row"><span class="lbl">Fatal</span><span class="val ${d.fatal ? 'fatal' : ''}">${d.fatal ? 'YES' : 'No'}</span></div>
+        <div class="detail-row"><span class="lbl">Time</span><span class="val">${d.time || '—'}</span></div>
+        <div class="detail-row"><span class="lbl">Species</span><span class="val">${d.species || '—'}</span></div>
+        <div class="detail-row"><span class="lbl">Source</span><span class="val">${d.source || '—'}</span></div>
+        <div class="detail-row"><span class="lbl">Coords (approx)</span><span class="val">${d.lat?.toFixed(3)}, ${d.lon?.toFixed(3)}</span></div>
+      `;
+      document.getElementById('detail-modal').classList.add('open');
+      document.getElementById('backdrop').classList.add('open');
+
+      // Highlight on map
+      if (d.lat != null) {
+        map.setView([d.lat, d.lon], Math.max(map.getZoom(), 5), { animate: true });
+      }
+    }
+
+    function closeDetail() {
+      document.getElementById('detail-modal').classList.remove('open');
+      document.getElementById('backdrop').classList.remove('open');
+    }
+
+    // ========== EVENTS ==========
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeFilter = btn.dataset.filter;
+        applyFilters();
+        updateStats();
+        renderList();
+        renderMap();
+        renderCharts();
+      });
+    });
+
+    let searchTimer;
+    document.getElementById('search').addEventListener('input', (e) => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        searchQuery = e.target.value.trim();
+        applyFilters();
+        updateStats();
+        renderList();
+        renderMap();
+        renderCharts();
+      }, 180);
+    });
+
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      map.setView([10, 20], 2, { animate: true });
+    });
+    document.getElementById('btn-zoom-in').addEventListener('click', () => map.zoomIn());
+    document.getElementById('btn-zoom-out').addEventListener('click', () => map.zoomOut());
+    document.getElementById('detail-close').addEventListener('click', closeDetail);
+    document.getElementById('backdrop').addEventListener('click', closeDetail);
+
+    // Keyboard
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeDetail();
+    });
+
+    // ========== INIT ==========
+    initMap();
+    loadData();
+
+    // Fallback sample if JSON fails to load (small)
+    const FALLBACK_SAMPLE = [
+      {"id":1,"date":"29th July 2026","year":2026,"type":"Unprovoked","country":"USA","state":"South Carolina","location":"Murrells Inlet","activity":"Swimming","name":"Unknown Teenager","sex":"M","age":"?","injury":"Bite just above the ankle","fatal":false,"time":"1715hrs","species":"Unknown small shark","source":"Sun News","lat":33.55,"lon":-79.03},
+      {"id":2,"date":"25th July 2026","year":2026,"type":"Unprovoked","country":"USA","state":"Florida","location":"Daytona Beach","activity":"Surfing","name":"—","sex":"M","age":"20s","injury":"Lacerations to leg","fatal":false,"time":"Afternoon","species":"Blacktip or Spinner","source":"—","lat":29.21,"lon":-81.02},
+      {"id":3,"date":"2025","year":2025,"type":"Unprovoked","country":"AUSTRALIA","state":"New South Wales","location":"Ballina","activity":"Surfing","name":"—","sex":"M","age":"—","injury":"Serious injuries","fatal":true,"time":"—","species":"White Shark","source":"—","lat":-28.84,"lon":153.56}
+    ];
+  </script>
+</body>
+</html>
