@@ -1,10 +1,10 @@
 {
-  "updated": "2026-09-19T11:04:06.805680+00:00",
+  "updated": "2026-09-20T11:28:51.977151+00:00",
   "sources": {
-    "GSAF": 6938,
+    "GSAF": 6946,
     "CDFW California": 205
   },
-  "count": 7143,
+  "count": 7151,
   "min_year": 1800,
   "max_year": 2026,
   "note": "GSAF = Global Shark Attack File. CDFW = California Dept of Fish & Wildlife (real coordinates).",
