@@ -1,0 +1,11 @@
+# Temporary downloads
+data/_gsaf_tmp.xls
+data/*.xls
+data/*.xlsx
+__pycache__/
+*.pyc
+.DS_Store
+.idea/
+.vscode/
+*.log
+.env
