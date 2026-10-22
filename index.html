@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JAWS STIMULATOR — Global Shark Encounter Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #eef6f9; --panel: #fff; --border: #cfe0e8;
+      --teal: #0d9488; --teal-d: #0f766e; --teal-l: #ccfbf1; --teal-s: #e6f7f5;
+      --ocean: #0284c7; --text: #0f172a; --muted: #64748b; --fatal: #e11d48;
+      --shadow: 0 1px 3px rgba(15,23,42,.06), 0 4px 14px rgba(13,148,136,.07);
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'DM Sans', system-ui, sans-serif; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+    .topbar { height: 48px; background: var(--panel); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 16px; gap: 12px; flex-shrink: 0; box-shadow: var(--shadow); z-index: 20; }
+    .brand { font-weight: 700; font-size: 15px; color: var(--teal-d); }
+    .brand span { color: var(--muted); font-weight: 500; }
+    .status { margin-left: auto; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+    .pulse { width: 8px; height: 8px; background: var(--teal); border-radius: 50%; box-shadow: 0 0 0 3px var(--teal-l); animation: pulse 2s infinite; }
+    @keyframes pulse { 50% { opacity: .4; } }
+
+    .workspace { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .upper {
+      flex: 1 1 55%;
+      display: flex;
+      flex-direction: row;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .upper > .panel.left {
+      width: var(--left-w, 280px);
+      min-width: 180px;
+      max-width: 420px;
+      flex-shrink: 0;
+    }
+    .upper > .panel.right {
+      width: var(--right-w, 270px);
+      min-width: 180px;
+      max-width: 400px;
+      flex-shrink: 0;
+    }
+    .upper > .map-wrap {
+      flex: 1 1 auto;
+      min-width: 0;
+      min-height: 0;
+      position: relative;
+    }
+    .upper > .v-resizer {
+      width: 5px;
+      flex-shrink: 0;
+      cursor: col-resize;
+      background: transparent;
+      align-self: stretch;
+    }
+    .upper > .v-resizer:hover,
+    .upper > .v-resizer.dragging { background: var(--teal); }
+    .panel { background: var(--panel); display: flex; flex-direction: column; min-height: 0; overflow: hidden; height: 100%; }
+    .panel.left { border-right: 1px solid var(--border); }
+    .panel.right { border-left: 1px solid var(--border); }
+    .panel-h { padding: 12px 14px 8px; border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--teal-d); display: flex; justify-content: space-between; align-items: center; }
+    .badge { font-family: 'JetBrains Mono', monospace; font-size: 11px; background: var(--teal-l); color: var(--teal-d); padding: 2px 8px; border-radius: 999px; }
+
+    .left-body, .right-body { padding: 10px 12px; overflow-y: auto; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    .left-body .event-list { flex: 1; min-height: 80px; overflow-y: auto; }
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+    .stat-card { background: var(--teal-s); border: 1px solid var(--border); padding: 8px 10px; border-radius: 8px; }
+    .stat-card .lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+    .stat-card .val { font-size: 18px; font-weight: 700; color: var(--teal-d); font-family: 'JetBrains Mono', monospace; }
+    .stat-card .val.fatal { color: var(--fatal); }
+
+    .search-box { position: relative; margin-bottom: 8px; }
+    .search-box input { width: 100%; background: #f7fbfc; border: 1px solid var(--border); padding: 8px 10px 8px 30px; font: inherit; font-size: 12px; border-radius: 8px; outline: none; }
+    .search-box input:focus { border-color: var(--teal); box-shadow: 0 0 0 3px var(--teal-l); }
+    .search-box::before { content: '⌕'; position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+
+    .chip-row { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+    .chip { background: #f7fbfc; border: 1px solid var(--border); color: var(--muted); padding: 4px 9px; font-size: 11px; font-weight: 500; border-radius: 999px; cursor: pointer; font-family: inherit; }
+    .chip:hover, .chip.active { border-color: var(--teal); color: var(--teal-d); background: var(--teal-l); }
+    .chip-label { font-size: 10px; color: var(--muted); width: 100%; margin-bottom: 2px; }
+
+    .event-list { overflow-y: auto; flex: 1; min-height: 0; }
+    .event-item { padding: 8px 10px; border-bottom: 1px solid #eef5f8; cursor: pointer; border-radius: 6px; }
+    .event-item:hover { background: var(--teal-s); }
+    .ei-top { display: flex; justify-content: space-between; gap: 6px; }
+    .ei-year { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: var(--teal-d); }
+    .ei-src { font-size: 9px; background: #e0f2fe; color: var(--ocean); padding: 1px 5px; border-radius: 4px; }
+    .ei-loc { font-size: 12px; font-weight: 500; }
+    .ei-meta { font-size: 11px; color: var(--muted); }
+    .fatal-tag { background: #ffe4e6; color: var(--fatal); padding: 0 4px; font-size: 9px; font-weight: 600; border-radius: 3px; margin-left: 4px; }
+
+    .map-wrap { position: relative; background: #b8d4e8; min-height: 0; flex: 1 1 auto; overflow: hidden; }
+    #map { width: 100%; height: 100%; position: absolute; inset: 0; }
+    .map-ctrls { position: absolute; top: 10px; right: 10px; z-index: 5; display: flex; flex-direction: column; gap: 5px; }
+    .map-btn { background: rgba(255,255,255,.95); border: 1px solid var(--border); color: var(--teal-d); padding: 7px 12px; font: inherit; font-size: 11px; font-weight: 600; border-radius: 8px; cursor: pointer; box-shadow: var(--shadow); }
+    .map-btn:hover { background: var(--teal-l); }
+    .map-title { position: absolute; top: 10px; left: 10px; z-index: 5; font-size: 10px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; color: var(--teal-d); background: rgba(255,255,255,.95); padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); box-shadow: var(--shadow); pointer-events: none; }
+
+    .right-body .chart-box { background: #f7fbfc; border: 1px solid var(--border); padding: 10px; border-radius: 8px; margin-bottom: 10px; }
+    .right-body .chart-box h4 { font-size: 10px; font-weight: 600; letter-spacing: .7px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+    .right-body canvas { max-height: 110px; }
+    .rank-row { display: flex; justify-content: space-between; padding: 4px 6px; border-bottom: 1px solid #eef5f8; font-size: 11px; cursor: pointer; border-radius: 6px; transition: background .12s; }
+    .rank-row:hover { background: var(--teal-s); }
+    .rank-row.active { background: var(--teal-l); outline: 1px solid var(--teal); }
+    .rank-row .count { color: var(--teal-d); font-family: 'JetBrains Mono', monospace; }
+    .ref-box { background: linear-gradient(135deg, var(--teal-s), #e0f2fe); border: 1px solid var(--border); padding: 10px; border-radius: 8px; font-size: 11px; color: var(--muted); line-height: 1.45; margin-bottom: 10px; }
+    .ref-box strong { color: var(--teal-d); }
+
+    /* Bottom data table */
+    .bottom-panel {
+      flex: 1 1 45%; min-height: 180px; background: var(--panel);
+      display: flex; flex-direction: column;
+      box-shadow: 0 -2px 12px rgba(15,23,42,.04);
+      position: relative;
+    }
+    .bottom-panel.collapsed { flex: 0 0 36px !important; min-height: 36px; max-height: 36px; }
+    /* Horizontal resize handle between map and table */
+    .h-resizer {
+      height: 6px; cursor: row-resize; background: var(--border);
+      flex-shrink: 0; position: relative; z-index: 15;
+      transition: background .2s ease;
+    }
+    .h-resizer:hover, .h-resizer.dragging { background: var(--teal); }
+    .h-resizer::after {
+      content: ''; position: absolute; left: 50%; top: 1px; transform: translateX(-50%);
+      width: 36px; height: 3px; border-radius: 2px; background: rgba(15,23,42,.2);
+    }
+    /* Vertical resizers for side panels */
+    .v-resizer {
+      width: 5px; cursor: col-resize; background: transparent;
+      flex-shrink: 0; z-index: 15; transition: background .2s ease;
+    }
+    .v-resizer:hover, .v-resizer.dragging { background: var(--teal); }
+    .upper { position: relative; }
+    .panel.left, .panel.right { transition: none; }
+    .event-item, .rank-row, table.data-table tr, .chip, .map-btn {
+      transition: background .2s ease, border-color .2s ease, color .2s ease, box-shadow .2s ease, outline .2s ease;
+    }
+    .event-item.active, table.data-table tr.active-row {
+      background: var(--teal-l); outline: 1px solid var(--teal);
+    }
+    .btn-export {
+      background: var(--teal-d); color: #fff; border: none; padding: 5px 12px;
+      font: inherit; font-size: 11px; font-weight: 600; border-radius: 6px;
+      cursor: pointer; transition: background .2s ease, transform .15s ease;
+    }
+    .btn-export:hover { background: var(--teal); }
+    .btn-export.secondary { background: #fff; color: var(--teal-d); border: 1px solid var(--border); }
+    .btn-export.secondary:hover { background: var(--teal-l); border-color: var(--teal); }
+    .btn-reset-filters {
+      background: #fff; border: 1px solid var(--border); color: var(--muted);
+      padding: 4px 10px; font: inherit; font-size: 11px; font-weight: 500;
+      border-radius: 999px; cursor: pointer; transition: all .2s ease;
+    }
+    .btn-reset-filters:hover { border-color: var(--fatal); color: var(--fatal); background: #fff1f2; }
+
+    .bottom-bar {
+      height: 36px; display: flex; align-items: center; padding: 0 12px; gap: 10px;
+      border-bottom: 1px solid var(--border); flex-shrink: 0; background: #f7fbfc;
+    }
+    .bottom-bar h3 { font-size: 11px; font-weight: 600; letter-spacing: .8px; text-transform: uppercase; color: var(--teal-d); }
+    .bottom-bar .spacer { flex: 1; }
+    .adv-filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border); background: #fafcfd; flex-shrink: 0; }
+    .adv-filters label { font-size: 10px; color: var(--muted); }
+    .adv-filters input, .adv-filters select {
+      font: inherit; font-size: 11px; border: 1px solid var(--border); border-radius: 6px;
+      padding: 4px 6px; background: #fff; color: var(--text); max-width: 110px;
+    }
+    .adv-filters input:focus, .adv-filters select:focus { outline: none; border-color: var(--teal); }
+    .table-wrap { flex: 1; overflow: auto; }
+    table.data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    table.data-table th {
+      position: sticky; top: 0; background: #f0f7fa; text-align: left; padding: 6px 10px;
+      font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted);
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    table.data-table td { padding: 6px 10px; border-bottom: 1px solid #eef5f8; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+    table.data-table tr:hover { background: var(--teal-s); cursor: pointer; }
+    table.data-table .fatal-cell { color: var(--fatal); font-weight: 600; }
+
+    .detail-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); width: min(440px,92vw); max-height: 80vh; background: #fff; border: 1px solid var(--border); box-shadow: 0 20px 50px rgba(15,23,42,.15); z-index: 2000; display: none; flex-direction: column; border-radius: 12px; overflow: hidden; }
+    .detail-modal.open { display: flex; }
+    .detail-header { padding: 12px 14px; background: var(--teal-s); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .detail-header h3 { font-size: 14px; font-weight: 700; color: var(--teal-d); }
+    .detail-close { background: none; border: none; font-size: 20px; color: var(--muted); cursor: pointer; }
+    .detail-body { padding: 14px; overflow-y: auto; font-size: 13px; }
+    .detail-row { display: grid; grid-template-columns: 100px 1fr; gap: 6px; margin-bottom: 6px; }
+    .detail-row .lbl { color: var(--muted); }
+    .backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.35); z-index: 1999; display: none; }
+    .backdrop.open { display: block; }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: #b8d4de; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">JAWS <span>STIMULATOR</span></div>
+    <div class="status">
+      <div class="pulse"></div>
+      <span id="last-update">Loading…</span>
+    </div>
+  </div>
+
+  <div class="workspace">
+    <div class="upper" id="upper-panels">
+      <div class="panel left" id="panel-left">
+        <div class="panel-h">Encounter log <span class="badge" id="visible-count">0</span></div>
+        <div class="left-body">
+          <div class="stat-grid">
+            <div class="stat-card"><div class="lbl">Incidents</div><div class="val" id="stat-total">—</div></div>
+            <div class="stat-card"><div class="lbl">Fatal</div><div class="val fatal" id="stat-fatal">—</div></div>
+            <div class="stat-card"><div class="lbl">Countries</div><div class="val" id="stat-countries">—</div></div>
+            <div class="stat-card"><div class="lbl">Years</div><div class="val" id="stat-years" style="font-size:13px">—</div></div>
+          </div>
+          <div class="search-box"><input id="search" type="text" placeholder="Search all fields…" /></div>
+          <div class="chip-label">Source</div>
+          <div class="chip-row" id="source-chips">
+            <button class="chip active" data-source="all">All</button>
+            <button class="chip" data-source="GSAF">GSAF</button>
+            <button class="chip" data-source="CDFW California">CA CDFW</button>
+            <button class="chip" data-source="Wikipedia (US Fatal)">Wiki Fatal</button>
+          </div>
+          <div class="chip-label">Quick filters <button class="btn-reset-filters" id="btn-reset-left" style="margin-left:6px;padding:2px 8px;font-size:10px">Reset</button></div>
+          <div class="chip-row" id="filter-chips">
+            <button class="chip active" data-filter="all">All</button>
+            <button class="chip" data-filter="fatal">Fatal</button>
+            <button class="chip" data-filter="nonfatal">Non-fatal</button>
+            <button class="chip" data-filter="unprovoked">Unprovoked</button>
+            <button class="chip" data-filter="provoked">Provoked</button>
+            <button class="chip" data-filter="recent">2020+</button>
+          </div>
+          <div class="event-list" id="event-list"></div>
+        </div>
+      </div>
+
+      <div class="v-resizer" id="resize-left" title="Drag to resize"></div>
+      <div class="map-wrap" id="map-wrap">
+        <div class="map-title">Globe view · zoom in for flat map</div>
+        <div id="map"></div>
+        <div class="map-ctrls">
+          <button class="map-btn" id="btn-reset">Reset globe</button>
+          <button class="map-btn" id="btn-zoom-in">Zoom +</button>
+          <button class="map-btn" id="btn-zoom-out">Zoom −</button>
+        </div>
+      </div>
+
+      <div class="v-resizer" id="resize-right" title="Drag to resize"></div>
+      <div class="panel right" id="panel-right">
+        <div class="panel-h">Analytics</div>
+        <div class="right-body">
+          <div class="ref-box" id="ref-stats">
+            <strong>Shark Data Lab reference</strong><br>
+            7,207 incidents · 1,523 fatal (21.1%) · 121 countries<br>
+            <span style="font-size:10px">ISAF individual case files are not public bulk downloads (researcher access only). Primary open data: GSAF.</span>
+          </div>
+          <div class="chart-box"><h4>By year</h4><canvas id="chart-year"></canvas></div>
+          <div class="chart-box"><h4>Top countries</h4><div id="top-countries"></div></div>
+          <div class="chart-box"><h4>Outcome</h4><canvas id="chart-outcome"></canvas></div>
+          <div class="chart-box"><h4>By source</h4><div id="by-source"></div></div>
+          <div class="chart-box"><h4>Species</h4><div id="top-species"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="h-resizer" id="resize-bottom" title="Drag to resize map / records"></div>
+    <div class="bottom-panel" id="bottom-panel">
+      <div class="bottom-bar">
+        <h3>Attack records</h3>
+        <span class="badge" id="table-count">0</span>
+        <div class="spacer"></div>
+        <button class="btn-export secondary" id="btn-export-csv">Export CSV</button>
+        <button class="btn-export" id="btn-export-xlsx">Export Excel</button>
+        <button class="btn-reset-filters" id="btn-reset-all">Reset filters</button>
+        <button class="map-btn" id="btn-toggle-table" style="padding:4px 10px">Collapse</button>
+      </div>
+      <div class="adv-filters" id="adv-filters">
+        <label>From</label>
+        <input type="number" id="year-from" placeholder="Year" min="1500" max="2030" />
+        <label>To</label>
+        <input type="number" id="year-to" placeholder="Year" min="1500" max="2030" />
+        <label>Continent</label>
+        <select id="f-continent"><option value="">All</option></select>
+        <label>Country</label>
+        <select id="f-country"><option value="">All</option></select>
+        <label>Species</label>
+        <select id="f-species"><option value="">All</option></select>
+        <label>Type</label>
+        <select id="f-type"><option value="">All</option>
+          <option>Unprovoked</option><option>Provoked</option>
+          <option>Watercraft</option><option>Sea Disaster</option><option>Invalid</option>
+        </select>
+        <label>Outcome</label>
+        <select id="f-outcome">
+          <option value="">All</option>
+          <option value="fatal">Fatal</option>
+          <option value="nonfatal">Non-fatal</option>
+        </select>
+        <button class="chip" id="btn-clear-adv">Clear table filters</button>
+        <button class="btn-reset-filters" id="btn-reset-adv">Reset all</button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Year</th><th>Date</th><th>Country</th><th>State</th><th>Location</th>
+              <th>Type</th><th>Outcome</th><th>Species</th><th>Activity</th><th>Source</th><th>Continent</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="backdrop" id="backdrop"></div>
+  <div class="detail-modal" id="detail-modal">
+    <div class="detail-header"><h3>Incident detail</h3><button class="detail-close" id="detail-close">×</button></div>
+    <div class="detail-body" id="detail-body"></div>
+  </div>
+
+<script>
+let allData=[], filtered=[], map, yearChart, outcomeChart;
+let activeFilter='all', activeSource='all', searchQuery='';
+let markers=[];
+const adv = { yearFrom:null, yearTo:null, continent:'', country:'', species:'', type:'', outcome:'' };
+
+async function loadData(){
+  const res=await fetch('data/shark_data.json');
+  allData=await res.json();
+  try{
+    const m=await (await fetch('data/meta.json')).json();
+    document.getElementById('last-update').textContent=
+      'Last sync: '+(m.updated||'').slice(0,10)+' · '+(m.count||allData.length).toLocaleString()+' records';
+    if(m.reference){
+      document.getElementById('ref-stats').innerHTML=
+        '<strong>Shark Data Lab reference</strong><br>'+
+        (m.reference.shark_data_lab_total||7207).toLocaleString()+' incidents · '+
+        (m.reference.shark_data_lab_fatal||1523).toLocaleString()+' fatal ('+(m.reference.shark_data_lab_fatality_rate||'21.1%')+') · '+
+        (m.reference.shark_data_lab_countries||121)+' countries<br>'+
+        '<span style="font-size:10px">Sources: '+Object.entries(m.sources||{}).map(([k,v])=>k+' ('+v+')').join(', ')+
+        '. '+ (m.reference.isaf_note||'') +'</span>';
+    }
+  }catch(_){ document.getElementById('last-update').textContent='Loaded '+allData.length+' records'; }
+  populateSelects();
+  refresh();
+}
+
+function populateSelects(){
+  const continents=[...new Set(allData.map(d=>d.continent).filter(Boolean))].sort();
+  const countries=[...new Set(allData.map(d=>d.country).filter(Boolean))].sort();
+  const species=[...new Set(allData.map(d=>(d.species||'').trim()).filter(s=>s&&s.length>2&&s.length<50))].sort();
+  const fill=(id,arr)=>{ const s=document.getElementById(id); arr.forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; s.appendChild(o); }); };
+  fill('f-continent', continents);
+  fill('f-country', countries);
+  fill('f-species', species.slice(0,200));
+}
+
+function applyFilters(){
+  filtered=allData.filter(d=>{
+    if(activeSource!=='all' && d.source!==activeSource) return false;
+    const t=(d.type||'').toLowerCase();
+    if(activeFilter==='fatal' && !d.fatal) return false;
+    if(activeFilter==='nonfatal' && d.fatal) return false;
+    if(activeFilter==='unprovoked' && !t.includes('unprovoked')) return false;
+    if(activeFilter==='provoked' && !t.includes('provoked')) return false;
+    if(activeFilter==='recent' && (d.year||0)<2020) return false;
+    if(adv.yearFrom!=null && (d.year||0)<adv.yearFrom) return false;
+    if(adv.yearTo!=null && (d.year||9999)>adv.yearTo) return false;
+    if(adv.continent && d.continent!==adv.continent) return false;
+    if(adv.country && d.country!==adv.country) return false;
+    if(adv.species && !(d.species||'').includes(adv.species)) return false;
+    if(adv.type && !(d.type||'').toLowerCase().includes(adv.type.toLowerCase())) return false;
+    if(adv.outcome==='fatal' && !d.fatal) return false;
+    if(adv.outcome==='nonfatal' && d.fatal) return false;
+    if(searchQuery){
+      const q=searchQuery.toLowerCase();
+      const hay=[d.date,d.year,d.type,d.country,d.state,d.location,d.activity,d.name,d.sex,d.age,d.injury,d.time,d.species,d.source,d.source_detail,d.continent,d.fatal?'fatal':'non-fatal'].join(' ').toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  document.getElementById('visible-count').textContent=filtered.length.toLocaleString();
+  document.getElementById('table-count').textContent=filtered.length.toLocaleString();
+}
+
+function updateStats(){
+  const fatal=filtered.filter(d=>d.fatal).length;
+  const countries=new Set(filtered.map(d=>d.country)).size;
+  const years=filtered.map(d=>d.year).filter(Boolean);
+  document.getElementById('stat-total').textContent=filtered.length.toLocaleString();
+  document.getElementById('stat-fatal').textContent=fatal.toLocaleString();
+  document.getElementById('stat-countries').textContent=countries;
+  document.getElementById('stat-years').textContent=years.length?Math.min(...years)+'–'+Math.max(...years):'—';
+}
+
+function renderList(){
+  const list=document.getElementById('event-list');
+  list.innerHTML='';
+  filtered.slice(0,400).forEach(d=>{
+    const el=document.createElement('div');
+    el.className='event-item';
+    el.innerHTML=`<div class="ei-top"><span class="ei-year">${d.year||'—'}</span><span class="ei-src">${(d.source||'').replace('Wikipedia (US Fatal)','Wiki')}</span></div>
+      <div class="ei-loc">${d.location||d.state||d.country||'Unknown'}${d.fatal?'<span class="fatal-tag">FATAL</span>':''}</div>
+      <div class="ei-meta">${d.country}${d.state?' · '+d.state:''} · ${(d.species||'Unknown').slice(0,32)}</div>`;
+    el.onclick=()=>openDetail(d);
+    list.appendChild(el);
+  });
+}
+
+function renderTable(){
+  const tb=document.getElementById('table-body');
+  tb.innerHTML='';
+  filtered.slice(0,800).forEach(d=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${d.year||''}</td><td>${(d.date||'').slice(0,20)}</td><td>${d.country||''}</td><td>${d.state||''}</td>
+      <td title="${d.location||''}">${(d.location||'').slice(0,40)}</td><td>${d.type||''}</td>
+      <td class="${d.fatal?'fatal-cell':''}">${d.fatal?'Fatal':'Non-fatal'}</td>
+      <td title="${d.species||''}">${(d.species||'').slice(0,28)}</td><td>${(d.activity||'').slice(0,24)}</td>
+      <td>${d.source||''}</td><td>${d.continent||''}</td>`;
+    tr.onclick=()=>openDetail(d);
+    tb.appendChild(tr);
+  });
+}
+
+
+const COUNTRY_VIEW = {
+  "USA": { center: [-95, 38], zoom: 3.2 },
+  "UNITED STATES": { center: [-95, 38], zoom: 3.2 },
+  "AUSTRALIA": { center: [134, -25], zoom: 3.5 },
+  "SOUTH AFRICA": { center: [25, -29], zoom: 5 },
+  "BRAZIL": { center: [-50, -14], zoom: 3.5 },
+  "MEXICO": { center: [-102, 23], zoom: 4 },
+  "NEW ZEALAND": { center: [174, -41], zoom: 5 },
+  "BAHAMAS": { center: [-76, 24], zoom: 6 },
+  "PAPUA NEW GUINEA": { center: [147, -6], zoom: 5.5 },
+  "FIJI": { center: [178, -18], zoom: 6 },
+  "EGYPT": { center: [32, 27], zoom: 5.5 },
+  "REUNION": { center: [55.5, -21.1], zoom: 8 },
+  "ITALY": { center: [12.5, 42], zoom: 5 },
+  "JAPAN": { center: [138, 36], zoom: 4.5 },
+  "INDIA": { center: [78, 22], zoom: 4 },
+  "PHILIPPINES": { center: [122, 12], zoom: 5 },
+  "FRANCE": { center: [2, 46], zoom: 5 },
+  "SPAIN": { center: [-3.5, 40], zoom: 5 },
+  "UNITED KINGDOM": { center: [-2, 54], zoom: 5 },
+  "CANADA": { center: [-95, 55], zoom: 3 },
+  "CUBA": { center: [-79, 22], zoom: 6 },
+  "COSTA RICA": { center: [-84, 10], zoom: 6.5 },
+  "NEW CALEDONIA": { center: [165.5, -21], zoom: 6 },
+  "MOZAMBIQUE": { center: [35, -18], zoom: 5 },
+  "INDONESIA": { center: [118, -2], zoom: 4 },
+};
+
+function zoomToCountry(name) {
+  if (!map || !name) return;
+  const key = Object.keys(COUNTRY_VIEW).find(k => k.toLowerCase() === name.toLowerCase() || name.toUpperCase().includes(k));
+  const view = key ? COUNTRY_VIEW[key] : null;
+  if (view) {
+    try { map.setProjection({ type: 'mercator' }); } catch(_){}
+    map.flyTo({ center: view.center, zoom: view.zoom, essential: true, duration: 1200 });
+  } else {
+    // fallback: compute bounds from filtered points of that country
+    const pts = filtered.filter(d => d.country === name && d.lat && d.lon);
+    if (pts.length) {
+      const lats = pts.map(d => d.lat), lons = pts.map(d => d.lon);
+      const sw = [Math.min(...lons), Math.min(...lats)];
+      const ne = [Math.max(...lons), Math.max(...lats)];
+      try { map.setProjection({ type: 'mercator' }); } catch(_){}
+      map.fitBounds([sw, ne], { padding: 60, maxZoom: 7, duration: 1200 });
+    }
+  }
+}
+
+function resetAllFilters() {
+  activeFilter = 'all';
+  activeSource = 'all';
+  searchQuery = '';
+  adv.yearFrom = adv.yearTo = null;
+  adv.continent = adv.country = adv.species = adv.type = adv.outcome = '';
+  const searchEl = document.getElementById('search');
+  if (searchEl) searchEl.value = '';
+  document.querySelectorAll('[data-filter]').forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
+  document.querySelectorAll('[data-source]').forEach(b => b.classList.toggle('active', b.dataset.source === 'all'));
+  ['year-from','year-to','f-continent','f-country','f-species','f-type','f-outcome'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  refresh();
+  try { map.setProjection({ type: 'globe' }); } catch(_){}
+  map.flyTo({ center: [10, 10], zoom: 1.2, essential: true });
+}
+
+function exportCSV() {
+  const cols = ['year','date','country','state','location','type','fatal','species','activity','name','sex','age','injury','time','source','continent','lat','lon'];
+  const esc = v => {
+    const s = v == null ? '' : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [cols.join(',')];
+  filtered.forEach(d => {
+    lines.push(cols.map(c => esc(c === 'fatal' ? (d.fatal ? 'Y' : 'N') : d[c])).join(','));
+  });
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'jaws-stimulator-attacks-' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function exportExcel() {
+  // SpreadsheetML XML (opens in Excel without external libs)
+  const cols = ['year','date','country','state','location','type','fatal','species','activity','name','sex','age','injury','time','source','continent','lat','lon'];
+  const headers = cols.map(c => c.charAt(0).toUpperCase() + c.slice(1));
+  let rows = '<Row>' + headers.map(h => '<Cell><Data ss:Type="String">' + h.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</Data></Cell>').join('') + '</Row>';
+  filtered.forEach(d => {
+    rows += '<Row>';
+    cols.forEach(c => {
+      let v = c === 'fatal' ? (d.fatal ? 'Y' : 'N') : (d[c] == null ? '' : d[c]);
+      const num = typeof v === 'number' || (c === 'year' || c === 'lat' || c === 'lon');
+      const t = num && v !== '' && !isNaN(v) ? 'Number' : 'String';
+      const s = String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      rows += '<Cell><Data ss:Type="' + t + '">' + s + '</Data></Cell>';
+    });
+    rows += '</Row>';
+  });
+  const xml = '<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>' +
+    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
+    '<Worksheet ss:Name="Attacks"><Table>' + rows + '</Table></Worksheet></Workbook>';
+  const blob = new Blob([xml], { type: 'application/vnd.ms-excel' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'jaws-stimulator-attacks-' + new Date().toISOString().slice(0,10) + '.xls';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function setupResizers() {
+  // Horizontal (map vs table)
+  const hRes = document.getElementById('resize-bottom');
+  const upper = document.getElementById('upper-panels');
+  const bottom = document.getElementById('bottom-panel');
+  let dragging = null;
+
+  hRes.addEventListener('mousedown', e => {
+    e.preventDefault();
+    dragging = 'h';
+    hRes.classList.add('dragging');
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+  });
+
+  // Vertical side panels
+  const leftRes = document.getElementById('resize-left');
+  const rightRes = document.getElementById('resize-right');
+  leftRes.addEventListener('mousedown', e => { e.preventDefault(); dragging = 'left'; leftRes.classList.add('dragging'); document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'; });
+  rightRes.addEventListener('mousedown', e => { e.preventDefault(); dragging = 'right'; rightRes.classList.add('dragging'); document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'; });
+
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const workspace = document.querySelector('.workspace');
+    const rect = workspace.getBoundingClientRect();
+    if (dragging === 'h') {
+      const topH = e.clientY - rect.top;
+      const total = rect.height - 6;
+      const topPct = Math.min(80, Math.max(25, (topH / total) * 100));
+      upper.style.flex = '0 0 ' + topPct + '%';
+      bottom.style.flex = '1 1 ' + (100 - topPct) + '%';
+      bottom.classList.remove('collapsed');
+      map && map.resize();
+    } else if (dragging === 'left') {
+      const w = Math.min(420, Math.max(180, e.clientX - rect.left));
+      document.documentElement.style.setProperty('--left-w', w + 'px');
+      map && map.resize();
+    } else if (dragging === 'right') {
+      const w = Math.min(400, Math.max(180, rect.right - e.clientX));
+      document.documentElement.style.setProperty('--right-w', w + 'px');
+      map && map.resize();
+    }
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    document.querySelectorAll('.h-resizer, .v-resizer').forEach(el => el.classList.remove('dragging'));
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    dragging = null;
+    map && map.resize();
+  });
+}
+
+function initMap(){
+  map=new maplibregl.Map({
+    container:'map',
+    style:'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+    center:[10,10],
+    zoom:1.2,
+    minZoom:0.5,
+    maxZoom:12,
+    attributionControl:false,
+    projection:{type:'globe'}
+  });
+  map.on('style.load',()=>{
+    try{ map.setProjection({type:'globe'}); }catch(e){ console.warn(e); }
+    try{
+      map.setFog({
+        color:'rgb(186,210,235)',
+        'high-color':'rgb(36,92,223)',
+        'horizon-blend':0.04,
+        'space-color':'rgb(11,11,25)',
+        'star-intensity':0.6
+      });
+    }catch(_){}
+  });
+  map.on('load',()=>{
+    try{ map.setProjection({type:'globe'}); }catch(_){}
+  });
+  map.addControl(new maplibregl.NavigationControl({showCompass:false}),'bottom-right');
+}
+
+function clearMarkers(){ markers.forEach(m=>m.remove()); markers=[]; }
+
+function renderMapMarkers(){
+  clearMarkers();
+  const step=filtered.length>3000?Math.ceil(filtered.length/3000):1;
+  filtered.filter((_,i)=>i%step===0).forEach(d=>{
+    if(d.lat==null||d.lon==null||(d.lat===0&&d.lon===0)) return;
+    const el=document.createElement('div');
+    el.style.cssText=`width:9px;height:9px;border-radius:50%;background:${d.fatal?'#e11d48':'#0d9488'};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.25);cursor:pointer;`;
+    const m=new maplibregl.Marker({element:el}).setLngLat([d.lon,d.lat]).addTo(map);
+    el.onclick=e=>{ e.stopPropagation(); openDetail(d); };
+    markers.push(m);
+  });
+}
+
+function renderCharts(){
+  const byYear={}; filtered.forEach(d=>{ if(d.year) byYear[d.year]=(byYear[d.year]||0)+1; });
+  const years=Object.keys(byYear).sort();
+  if(yearChart) yearChart.destroy();
+  yearChart=new Chart(document.getElementById('chart-year'),{
+    type:'line', data:{ labels:years, datasets:[{ data:years.map(y=>byYear[y]), borderColor:'#0d9488', backgroundColor:'rgba(13,148,136,.12)', fill:true, tension:.3, pointRadius:0, borderWidth:2 }]},
+    options:{
+      responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ x:{ticks:{color:'#64748b',maxTicksLimit:5,font:{size:9}},grid:{color:'#eef5f8'}}, y:{ticks:{color:'#64748b',font:{size:9}},grid:{color:'#eef5f8'}} },
+      onClick(evt, elements){
+        if(!elements.length) return;
+        const yr=parseInt(years[elements[0].index],10);
+        if(adv.yearFrom===yr && adv.yearTo===yr){
+          adv.yearFrom=adv.yearTo=null;
+          document.getElementById('year-from').value='';
+          document.getElementById('year-to').value='';
+        } else {
+          adv.yearFrom=adv.yearTo=yr;
+          document.getElementById('year-from').value=yr;
+          document.getElementById('year-to').value=yr;
+        }
+        refresh();
+      }
+    }
+  });
+  const fatalN=filtered.filter(d=>d.fatal).length;
+  if(outcomeChart) outcomeChart.destroy();
+  outcomeChart=new Chart(document.getElementById('chart-outcome'),{
+    type:'doughnut', data:{ labels:['Fatal','Non-fatal'], datasets:[{ data:[fatalN,filtered.length-fatalN], backgroundColor:['#e11d48','#0d9488'], borderWidth:0 }]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}}},
+      onClick(evt, elements){
+        if(!elements.length) return;
+        const idx=elements[0].index;
+        const label=idx===0?'fatal':'nonfatal';
+        if(adv.outcome===label){ adv.outcome=''; document.getElementById('f-outcome').value=''; }
+        else { adv.outcome=label; document.getElementById('f-outcome').value=label; }
+        // also sync quick filter chips
+        if(adv.outcome==='fatal'){ activeFilter='fatal'; }
+        else if(adv.outcome==='nonfatal'){ activeFilter='nonfatal'; }
+        else { activeFilter='all'; }
+        document.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('active', b.dataset.filter===activeFilter));
+        refresh();
+      }
+    }
+  });
+  const rank=(key,el,n=8,filterKey)=>{
+    const m={}; filtered.forEach(d=>{ const k=d[key]||'?'; m[k]=(m[k]||0)+1; });
+    const entries=Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,n);
+    const box=document.getElementById(el);
+    box.innerHTML=entries.map(([a,b])=>{
+      const active = (filterKey==='country' && adv.country===a) || (filterKey==='source' && activeSource===a) || (filterKey==='species' && adv.species && a.includes(adv.species));
+      return `<div class="rank-row${active?' active':''}" data-rank-key="${filterKey}" data-rank-val="${a.replace(/"/g,'&quot;')}"><span>${a.slice(0,28)}</span><span class="count">${b}</span></div>`;
+    }).join('')||'—';
+    box.querySelectorAll('.rank-row').forEach(row=>{
+      row.onclick=()=>{
+        const k=row.dataset.rankKey;
+        const v=row.dataset.rankVal;
+        if(k==='country'){
+          if(adv.country===v){ adv.country=''; document.getElementById('f-country').value=''; refresh(); try{map.setProjection({type:'globe'});}catch(_){ } map.flyTo({center:[10,10],zoom:1.2,essential:true}); return; }
+          else { adv.country=v; document.getElementById('f-country').value=v; refresh(); zoomToCountry(v); return; }
+        } else if(k==='source'){
+          if(activeSource===v){ activeSource='all'; document.querySelectorAll('[data-source]').forEach(b=>b.classList.toggle('active', b.dataset.source==='all')); }
+          else {
+            activeSource=v;
+            document.querySelectorAll('[data-source]').forEach(b=>b.classList.toggle('active', b.dataset.source===v));
+          }
+        } else if(k==='species'){
+          const full = v.replace(/…$/,'');
+          if(adv.species && v.includes(adv.species)){ adv.species=''; document.getElementById('f-species').value=''; }
+          else {
+            // find best matching full species from select options
+            const sel=document.getElementById('f-species');
+            let match=full;
+            for(const opt of sel.options){ if(opt.value && (opt.value.includes(full)||full.includes(opt.value.slice(0,20)))){ match=opt.value; break; } }
+            adv.species=match; sel.value=match;
+          }
+        }
+        refresh();
+      };
+    });
+  };
+  rank('country','top-countries',8,'country');
+  rank('source','by-source',5,'source');
+  const bySp={}; filtered.forEach(d=>{ let s=(d.species||'Unknown').trim(); if(s.length>32)s=s.slice(0,30)+'…'; if(!s||s==='nan')s='Unknown'; bySp[s]=(bySp[s]||0)+1; });
+  const spBox=document.getElementById('top-species');
+  const spEntries=Object.entries(bySp).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  spBox.innerHTML=spEntries.map(([a,b])=>{
+    const active=adv.species && a.includes(adv.species);
+    return `<div class="rank-row${active?' active':''}" data-rank-key="species" data-rank-val="${a.replace(/"/g,'&quot;')}"><span>${a}</span><span class="count">${b}</span></div>`;
+  }).join('')||'—';
+  spBox.querySelectorAll('.rank-row').forEach(row=>{
+    row.onclick=()=>{
+      const v=row.dataset.rankVal;
+      const full=v.replace(/…$/,'');
+      if(adv.species && v.includes(adv.species)){ adv.species=''; document.getElementById('f-species').value=''; }
+      else {
+        const sel=document.getElementById('f-species');
+        let match=full;
+        for(const opt of sel.options){ if(opt.value && (opt.value.includes(full)||full.includes(opt.value.slice(0,20)))){ match=opt.value; break; } }
+        adv.species=match; sel.value=match;
+      }
+      refresh();
+    };
+  });
+}
+
+function openDetail(d){
+  document.getElementById('detail-body').innerHTML=`
+    <div class="detail-row"><span class="lbl">Year / Date</span><span>${d.year||'—'} · ${d.date||'—'}</span></div>
+    <div class="detail-row"><span class="lbl">Source</span><span>${d.source||'—'}<br><span style="font-size:11px;color:#64748b">${d.source_detail||''}</span></span></div>
+    <div class="detail-row"><span class="lbl">Type</span><span>${d.type||'—'}</span></div>
+    <div class="detail-row"><span class="lbl">Continent</span><span>${d.continent||'—'}</span></div>
+    <div class="detail-row"><span class="lbl">Country</span><span>${d.country||'—'}</span></div>
+    <div class="detail-row"><span class="lbl">State</span><span>${d.state||'—'}</span></div>
+    <div class="detail-row"><span class="lbl">Location</span><span>${d.location||'—'}</span></div>
+    <div class="detail-row"><span class="lbl">Activity</span><span>${d.activity||'—'}</span></div>
+    <div class="detail-row"><span class="lbl">Name</span><span>${d.name||'—'}</span></div>
+    <div class="detail-row"><span class="lbl">Sex / Age</span><span>${d.sex||'—'} / ${d.age||'—'}</span></div>
+    <div class="detail-row"><span class="lbl">Injury</span><span>${d.injury||'—'}</span></div>
+    <div class="detail-row"><span class="lbl">Fatal</span><span style="color:${d.fatal?'#e11d48':'inherit'};font-weight:${d.fatal?600:400}">${d.fatal?'YES':'No'}</span></div>
+    <div class="detail-row"><span class="lbl">Species</span><span>${d.species||'—'}</span></div>
+    <div class="detail-row"><span class="lbl">Coords</span><span>${d.lat}, ${d.lon}</span></div>`;
+  document.getElementById('detail-modal').classList.add('open');
+  document.getElementById('backdrop').classList.add('open');
+  if(d.lat!=null && !(d.lat===0&&d.lon===0)) map.flyTo({center:[d.lon,d.lat],zoom:Math.max(map.getZoom(),5.5),essential:true});
+}
+function closeDetail(){ document.getElementById('detail-modal').classList.remove('open'); document.getElementById('backdrop').classList.remove('open'); }
+
+function refresh(){ applyFilters(); updateStats(); renderList(); renderTable(); renderMapMarkers(); renderCharts(); }
+
+document.querySelectorAll('[data-filter]').forEach(btn=>{
+  btn.onclick=()=>{ document.querySelectorAll('[data-filter]').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); activeFilter=btn.dataset.filter; refresh(); };
+});
+document.querySelectorAll('[data-source]').forEach(btn=>{
+  btn.onclick=()=>{ document.querySelectorAll('[data-source]').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); activeSource=btn.dataset.source; refresh(); };
+});
+let st; document.getElementById('search').oninput=e=>{ clearTimeout(st); st=setTimeout(()=>{ searchQuery=e.target.value.trim(); refresh(); },150); };
+
+function bindAdv(id, key, parse){
+  document.getElementById(id).onchange=e=>{
+    const v=e.target.value;
+    adv[key]=v===''? (parse?null:'') : (parse?parse(v):v);
+    refresh();
+  };
+}
+bindAdv('year-from','yearFrom',v=>parseInt(v,10));
+bindAdv('year-to','yearTo',v=>parseInt(v,10));
+bindAdv('f-continent','continent');
+bindAdv('f-country','country');
+bindAdv('f-species','species');
+bindAdv('f-type','type');
+bindAdv('f-outcome','outcome');
+document.getElementById('btn-clear-adv').onclick=()=>{
+  adv.yearFrom=adv.yearTo=null; adv.continent=adv.country=adv.species=adv.type=adv.outcome='';
+  ['year-from','year-to','f-continent','f-country','f-species','f-type','f-outcome'].forEach(id=>document.getElementById(id).value='');
+  refresh();
+};
+
+document.getElementById('btn-reset').onclick=()=>{
+  try{ map.setProjection({type:'globe'}); }catch(_){}
+  map.flyTo({center:[10,10],zoom:1.2,essential:true});
+};
+document.getElementById('btn-zoom-in').onclick=()=>map.zoomIn({duration:300});
+document.getElementById('btn-zoom-out').onclick=()=>map.zoomOut({duration:300});
+document.getElementById('detail-close').onclick=closeDetail;
+document.getElementById('backdrop').onclick=closeDetail;
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeDetail(); });
+document.getElementById('btn-toggle-table').onclick=()=>{
+  const p=document.getElementById('bottom-panel');
+  const upper=document.getElementById('upper-panels');
+  p.classList.toggle('collapsed');
+  if(p.classList.contains('collapsed')){
+    upper.style.flex='1 1 auto';
+    document.getElementById('btn-toggle-table').textContent='Expand';
+  } else {
+    upper.style.flex='1 1 55%';
+    p.style.flex='1 1 45%';
+    document.getElementById('btn-toggle-table').textContent='Collapse';
+  }
+  setTimeout(()=>map.resize(),200);
+};
+
+document.getElementById('btn-export-csv').onclick = exportCSV;
+document.getElementById('btn-export-xlsx').onclick = exportExcel;
+document.getElementById('btn-reset-all').onclick = resetAllFilters;
+document.getElementById('btn-reset-adv').onclick = resetAllFilters;
+document.getElementById('btn-reset-left').onclick = resetAllFilters;
+// enhance clear adv to only clear table filters (already exists)
+const _clearAdv = document.getElementById('btn-clear-adv');
+if (_clearAdv) _clearAdv.onclick = () => {
+  adv.yearFrom = adv.yearTo = null;
+  adv.continent = adv.country = adv.species = adv.type = adv.outcome = '';
+  ['year-from','year-to','f-continent','f-country','f-species','f-type','f-outcome'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  refresh();
+};
+
+initMap();
+setupResizers();
+loadData();
+// default: globe fills upper area; balanced split already in CSS
+setTimeout(() => { map && map.resize(); }, 300);
+</script>
+</body>
+</html>
